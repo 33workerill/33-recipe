@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vercel/
+.local-previous/
+.tooling/
+.pnpm-store/
+*.tsbuildinfo
+*.log
+*.local
+.env*
+!.env.example
+.DS_Store
