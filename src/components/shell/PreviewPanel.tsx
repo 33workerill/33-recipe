@@ -78,7 +78,16 @@ export function PreviewPanel({
         </div>
       </div>
 
-      <div className="flex flex-1 items-start justify-center px-5 py-8 sm:px-8 xl:sticky xl:top-0">
+      <div className="flex flex-1 flex-col items-center px-5 py-6 sm:px-8 xl:sticky xl:top-0">
+        <div className="mb-4 w-full max-w-[520px]">
+          <Button type="button" variant="primary" disabled className="w-full">
+            <FileDown aria-hidden="true" />
+            Экспортировать
+          </Button>
+          <p className="mt-2 text-center text-xs leading-5 text-muted-foreground">
+            Экспорт станет доступен в будущих этапах.
+          </p>
+        </div>
         <article
           aria-label="Макет 33 Monochrome"
           className="shell-preview-paper w-full max-w-[520px] rounded-sm border p-6 text-[#191919] shadow-xl sm:p-10"
@@ -339,16 +348,6 @@ export function PreviewPanel({
             </div>
           )}
         </article>
-      </div>
-
-      <div className="border-t border-border bg-background/70 px-5 py-5 sm:px-8">
-        <Button type="button" variant="primary" disabled className="w-full">
-          <FileDown aria-hidden="true" />
-          Экспортировать
-        </Button>
-        <p className="mt-2 text-center text-xs leading-5 text-muted-foreground">
-          Экспорт станет доступен в будущих этапах.
-        </p>
       </div>
     </aside>
   )
