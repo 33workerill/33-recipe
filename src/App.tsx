@@ -1,52 +1,75 @@
-import { ThemeToggle } from '@/theme/theme-toggle'
+import { useState } from 'react'
+import { AppSidebar, MobileNavigation } from '@/components/shell/AppSidebar'
+import { EditorWorkspace } from '@/components/shell/EditorWorkspace'
+import { PreviewPanel } from '@/components/shell/PreviewPanel'
+import { WorkspacePage } from '@/components/shell/WorkspacePage'
+import type { WorkspaceSection } from '@/components/shell/navigation'
+import { Button } from '@/components/ui/button'
+
+type WorkspacePanel = 'editor' | 'preview'
 
 function App() {
+  const [section, setSection] = useState<WorkspaceSection>('editor')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [panel, setPanel] = useState<WorkspacePanel>('editor')
+
+  const navigate = (next: WorkspaceSection) => {
+    setSection(next)
+    if (next === 'editor') setPanel('editor')
+  }
+
   return (
-    <div className="flex min-h-svh flex-col bg-background text-foreground">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-6 sm:px-10 sm:py-8">
-        <a
-          href="/"
-          className="shrink-0 text-sm font-semibold tracking-[-0.035em]"
-        >
-          33 RECIPE
-        </a>
-        <div className="flex items-center gap-3 sm:gap-5">
-          <span className="hidden text-xs text-muted-foreground lg:inline">
-            Personal Recipe Studio
-          </span>
-          <a
-            href="/ui"
-            className="type-caption text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-          >
-            33 UI
-          </a>
-          <ThemeToggle />
-        </div>
-      </header>
+    <div className="flex min-h-svh min-w-0 bg-background text-foreground">
+      <AppSidebar
+        active={section}
+        collapsed={sidebarCollapsed}
+        onCollapse={() => setSidebarCollapsed((current) => !current)}
+        onNavigate={navigate}
+      />
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-20 sm:px-10 sm:py-28">
-        <div className="max-w-3xl">
-          <p className="type-caption mb-9 uppercase tracking-[0.18em] text-muted-foreground">
-            Персональная студия рецептов
-          </p>
-          <span aria-hidden="true" className="type-display block">
-            33.
-          </span>
-          <h1 className="type-h1 mt-7 sm:mt-10">
-            Рецепты, к которым хочется возвращаться.
-          </h1>
-          <p className="type-body-lg mt-7 max-w-xl text-muted-foreground">
-            33 RECIPE — личное пространство для создания, оформления и хранения
-            любимых рецептов. Со временем здесь появятся удобный редактор,
-            красивые шаблоны и форматы для печати.
-          </p>
-        </div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <MobileNavigation active={section} onNavigate={navigate} />
 
-      <footer className="type-caption mx-auto flex w-full max-w-6xl flex-col gap-2 border-t border-border px-6 py-6 text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-10">
-        <span>33 RECIPE · Personal Recipe Studio</span>
-        <span>Проект на этапе Design System</span>
-      </footer>
+        {section === 'editor' ? (
+          <>
+            <div
+              role="group"
+              aria-label="Панель рабочего пространства"
+              className="flex gap-1 border-b border-border px-4 py-3 md:px-8 xl:hidden"
+            >
+              <Button
+                type="button"
+                variant={panel === 'editor' ? 'secondary' : 'ghost'}
+                aria-pressed={panel === 'editor'}
+                onClick={() => setPanel('editor')}
+                className="min-w-0 flex-1"
+              >
+                Редактор
+              </Button>
+              <Button
+                type="button"
+                variant={panel === 'preview' ? 'secondary' : 'ghost'}
+                aria-pressed={panel === 'preview'}
+                onClick={() => setPanel('preview')}
+                className="min-w-0 flex-1"
+              >
+                Предпросмотр
+              </Button>
+            </div>
+
+            <div className="min-w-0 flex-1 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(350px,38%)]">
+              <div className={panel === 'preview' ? 'hidden xl:block' : ''}>
+                <EditorWorkspace />
+              </div>
+              <div className={panel === 'editor' ? 'hidden xl:block' : ''}>
+                <PreviewPanel />
+              </div>
+            </div>
+          </>
+        ) : (
+          <WorkspacePage section={section} />
+        )}
+      </div>
     </div>
   )
 }
