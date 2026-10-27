@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { ChevronLeft, ChevronRight, FileDown } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { RecipeRenderer } from '@/features/recipes/presentation/RecipeRenderer'
 import {
-  createRecipePagePlan,
   getPageGeometry,
   isDuplexFormat,
   type RecipePresentation,
 } from '@/features/recipes/presentation'
 import type { Recipe } from '@/features/recipes/model'
+import { usePagination } from '@/features/recipes/presentation/use-pagination'
 
 type ZoomMode = 'fit' | 'width' | 'manual' | '100'
 type DuplexView = 'front' | 'back' | 'both'
@@ -29,25 +30,26 @@ export function PreviewPanel({
   const [manualZoom, setManualZoom] = useState(100)
   const [duplexView, setDuplexView] = useState<DuplexView>('front')
   const [pageIndex, setPageIndex] = useState(0)
-  const [packing, setPacking] = useState({ key: '', density: 1 })
-  const [overflowState, setOverflowState] = useState({
-    key: '',
-    pages: [] as number[],
-  })
+  const {
+    sourceRef,
+    measurementRef,
+    pages: measuredPages,
+    ready,
+    error,
+  } = usePagination(recipe, presentation, imageUrls)
   const duplex = isDuplexFormat(presentation.formatId)
-  const planKey = `${recipe?.id ?? 'empty'}:${recipe?.updatedAt ?? ''}:${presentation.formatId}:${presentation.orientation}:${presentation.styleId}:${presentation.typographyScale}`
-  const density = packing.key === planKey ? packing.density : 1
-  const plan = useMemo(
-    () => (recipe ? createRecipePagePlan(recipe, presentation, density) : []),
-    [recipe, presentation, density],
+  const pages = Math.max(
+    1,
+    duplex ? Math.ceil(measuredPages.length / 2) : measuredPages.length,
   )
-  const pages = Math.max(1, plan.length)
   const geometry = getPageGeometry(
     presentation.formatId,
     presentation.orientation,
   )
   const pageWidth = geometry.widthMm * pxPerMm
-  const pageHeight = geometry.adaptive ? 900 : geometry.heightMm * pxPerMm
+  const pageHeight = geometry.adaptive
+    ? (measuredPages[0]?.heightPx ?? 900)
+    : geometry.heightMm * pxPerMm
   const isWideScreen = typeof window === 'undefined' || window.innerWidth >= 640
   const activePageIndex = Math.min(pageIndex, pages - 1)
   const visibleSides: Array<'front' | 'back'> =
@@ -91,52 +93,11 @@ export function PreviewPanel({
             )
           : fitScale
 
-  useEffect(() => {
-    const articles = viewportRef.current?.querySelectorAll<HTMLElement>(
-      '[data-recipe-page-content]',
-    )
-    if (!articles || typeof ResizeObserver === 'undefined') return
-    const findOverflow = () => {
-      const indexes = [...articles].flatMap((content, index) =>
-        content.scrollHeight > content.clientHeight + 2 ? [index + 1] : [],
-      )
-      setOverflowState((current) =>
-        current.key === planKey && current.pages.join(',') === indexes.join(',')
-          ? current
-          : { key: planKey, pages: indexes },
-      )
-      if (indexes.length && density > 0.65 && !geometry.adaptive) {
-        setPacking((current) =>
-          current.key === planKey && current.density <= density - 0.01
-            ? current
-            : {
-                key: planKey,
-                density: Math.max(0.65, Number((density - 0.08).toFixed(2))),
-              },
-        )
-      }
-    }
-    const observer = new ResizeObserver(findOverflow)
-    articles.forEach((article) => observer.observe(article))
-    findOverflow()
-    return () => observer.disconnect()
-  }, [
-    recipe,
-    presentation,
-    pageIndex,
-    duplexView,
-    viewport.width,
-    density,
-    planKey,
-    geometry.adaptive,
-  ])
-
-  const overflowPages = overflowState.key === planKey ? overflowState.pages : []
-
   return (
     <aside
       aria-label="Предпросмотр рецепта"
-      className="flex min-h-0 min-w-0 flex-col bg-muted/40"
+      aria-busy={Boolean(recipe && !ready)}
+      className="flex h-[calc(100svh-8rem)] min-h-[420px] min-w-0 flex-col bg-muted/40 xl:sticky xl:top-0 xl:h-svh"
     >
       <header className="border-b border-border px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -265,10 +226,9 @@ export function PreviewPanel({
             </Button>
           </nav>
         )}
-        {overflowPages.length > 0 && (
+        {error && (
           <p role="alert" className="mt-2 text-xs text-destructive">
-            Проверьте переполнение листа {overflowPages.join(', ')}: увеличьте
-            размер листа или уменьшите размер текста. Текст не скрыт.
+            {error}
           </p>
         )}
         {pages > 1 && (
@@ -287,30 +247,70 @@ export function PreviewPanel({
         <div
           className={`recipe-preview-pages ${duplex && visibleSides.length === 2 ? 'recipe-preview-duplex' : ''}`}
         >
-          {visibleSides.map((side) => (
-            <div
-              className="recipe-preview-frame"
-              key={`${side}-${activePageIndex}`}
-              style={
-                {
-                  width: `${pageWidth * scale}px`,
-                  height: `${pageHeight * scale}px`,
-                  '--preview-scale': scale,
-                } as CSSProperties
-              }
-            >
+          {(!recipe || ready) &&
+            !error &&
+            visibleSides.map((side) => (
+              <div
+                className="recipe-preview-frame"
+                key={`${side}-${activePageIndex}`}
+                style={
+                  {
+                    width: `${pageWidth * scale}px`,
+                    height: `${pageHeight * scale}px`,
+                    '--preview-scale': scale,
+                  } as CSSProperties
+                }
+              >
+                <RecipeRenderer
+                  recipe={recipe}
+                  imageUrls={imageUrls}
+                  presentation={presentation}
+                  pageIndex={activePageIndex}
+                  side={duplex ? side : 'single'}
+                  pageHtml={
+                    measuredPages[
+                      duplex
+                        ? activePageIndex * 2 + (side === 'back' ? 1 : 0)
+                        : activePageIndex
+                    ]?.html
+                  }
+                />
+              </div>
+            ))}
+        </div>
+      </div>
+      {recipe && !ready && !error && (
+        <p className="p-4 text-sm">Компоновка страниц…</p>
+      )}
+      {createPortal(
+        <div className="recipe-measurement" aria-hidden="true" inert>
+          <div ref={sourceRef}>
+            <RecipeRenderer
+              recipe={recipe}
+              imageUrls={imageUrls}
+              presentation={presentation}
+            />
+          </div>
+          <div ref={measurementRef} />
+          <div
+            data-pagination-audit
+            data-layout-status={ready ? 'ready' : 'pending'}
+          >
+            {measuredPages.map((page, index) => (
               <RecipeRenderer
+                key={index}
                 recipe={recipe}
                 imageUrls={imageUrls}
                 presentation={presentation}
-                pageIndex={activePageIndex}
-                side={duplex ? side : 'single'}
-                plan={plan[activePageIndex]}
+                pageIndex={page.sheet}
+                side={page.side}
+                pageHtml={page.html}
               />
-            </div>
-          ))}
-        </div>
-      </div>
+            ))}
+          </div>
+        </div>,
+        document.body,
+      )}
     </aside>
   )
 }
