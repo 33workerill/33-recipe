@@ -10,9 +10,9 @@ The recipe metadata and image Blob are written in the same IndexedDB transaction
 
 ## Preview
 
-`PreviewPanel` renders the current React recipe state, not a second read from IndexedDB. It uses a neutral paper surface and a first, independent template called **33 Monochrome**. The template shows available recipe fields, omits empty optional sections, and grows with the recipe content. Missing Blob records omit the image or show an unavailable-file placeholder in the editor.
+`PreviewPanel` renders the current React recipe state, not a second read from IndexedDB. The presentation layer offers six distinct styles and selectable format proportions. It shows available recipe fields, omits empty optional sections, and preserves long content with an overflow notice on fixed formats. Missing Blob records omit the image or show an unavailable-file placeholder in the editor.
 
-The preview is intentionally separate from future layouts, themes and export modules. Changing the application's light/dark theme does not recolor the recipe page.
+Presentation settings and presets are stored separately from Recipe Data. Changing the application's light/dark theme does not recolor the recipe page. Preview geometry is not a promise of exact print pagination or file export.
 
 ## Backup and restore
 

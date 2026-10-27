@@ -1,19 +1,43 @@
-import { Expand, FileDown, ScanLine, ZoomIn } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { FileDown, RotateCcw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { RecipeRenderer } from '@/features/recipes/presentation/RecipeRenderer'
+import {
+  DEFAULT_PRESENTATION,
+  FORMAT_LABELS,
+  RECIPE_FORMATS,
+  RECIPE_STYLES,
+  STYLE_LABELS,
+  loadPresentation,
+  loadPresentationPresets,
+  savePresentation,
+  savePresentationPresets,
+  type RecipePresentation,
+  type RecipePresentationPreset,
+} from '@/features/recipes/presentation'
 import type { Recipe } from '@/features/recipes/model'
 
-const units: Record<string, string> = {
-  g: 'г',
-  kg: 'кг',
-  ml: 'мл',
-  l: 'л',
-  pcs: 'шт.',
-  tsp: 'ч. л.',
-  tbsp: 'ст. л.',
-  pinch: 'щепотка',
-  to_taste: 'по вкусу',
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 py-1 text-sm">
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-4 accent-[var(--recipe-accent)]"
+      />
+    </label>
+  )
 }
-const difficulties = { easy: 'Легко', medium: 'Средне', hard: 'Сложно' }
 
 export function PreviewPanel({
   recipe,
@@ -22,332 +46,393 @@ export function PreviewPanel({
   recipe: Recipe | null
   imageUrls: Record<string, string>
 }) {
-  const cover = recipe?.assets.find((asset) => asset.role === 'cover')
-  const gallery = recipe?.assets.filter(
-    (asset) => asset.role === 'gallery' && imageUrls[asset.id],
+  const recipeId = recipe?.id
+  const [settings, setSettings] = useState(() => ({
+    recipeId,
+    presentation: recipeId
+      ? loadPresentation(recipeId)
+      : { ...DEFAULT_PRESENTATION },
+  }))
+  const presentation =
+    settings.recipeId === recipeId
+      ? settings.presentation
+      : recipeId
+        ? loadPresentation(recipeId)
+        : { ...DEFAULT_PRESENTATION }
+  const [presets, setPresets] = useState<RecipePresentationPreset[]>(
+    loadPresentationPresets,
   )
-  const hasFacts =
-    !!recipe &&
-    [
-      recipe.servings,
-      recipe.preparationTimeMinutes,
-      recipe.cookingTimeMinutes,
-      recipe.difficulty,
-    ].some((value) => value !== undefined)
+  const [presetName, setPresetName] = useState('')
+  const [activePreset, setActivePreset] = useState('')
+  const [previewWidth, setPreviewWidth] = useState(100)
+
+  useEffect(() => {
+    if (!recipeId || settings.recipeId !== recipeId) return
+    try {
+      savePresentation(recipeId, settings.presentation)
+    } catch {
+      // Keep the current in-memory choice usable if browser storage is unavailable.
+    }
+  }, [recipeId, settings])
+
+  const update = <K extends keyof RecipePresentation>(
+    key: K,
+    value: RecipePresentation[K],
+  ) =>
+    setSettings((current) => ({
+      recipeId,
+      presentation: {
+        ...(current.recipeId === recipeId
+          ? current.presentation
+          : presentation),
+        [key]: value,
+      },
+    }))
+
+  const updatePresets = (next: RecipePresentationPreset[]) => {
+    setPresets(next)
+    try {
+      savePresentationPresets(next)
+    } catch {
+      // Presets remain available during the current page session.
+    }
+  }
+
+  const savePreset = () => {
+    const name = presetName.trim()
+    if (!name) return
+    const preset = {
+      id: crypto.randomUUID(),
+      name,
+      presentation: { ...presentation },
+    }
+    updatePresets([...presets, preset])
+    setActivePreset(preset.id)
+    setPresetName('')
+  }
+
+  const selectedPreset = presets.find((preset) => preset.id === activePreset)
+
   return (
     <aside
       aria-label="Предпросмотр рецепта"
       className="flex min-h-full min-w-0 flex-col border-l border-border bg-muted/40"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-6 sm:px-8">
-        <div>
-          <p className="type-caption uppercase tracking-[0.15em] text-muted-foreground">
-            Визуализация
-          </p>
-          <h2 className="mt-2 text-xl font-semibold tracking-[-0.04em]">
-            Предпросмотр
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Шаблон 33 Monochrome
-          </p>
-        </div>
-        <div
-          className="flex gap-1"
-          aria-label="Будущие настройки предпросмотра"
-        >
+      <header className="border-b border-border px-5 py-5 sm:px-8">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="type-caption uppercase tracking-[0.15em] text-muted-foreground">
+              Визуализация
+            </p>
+            <h2 className="mt-2 text-xl font-semibold tracking-[-0.04em]">
+              Студия оформления
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {STYLE_LABELS[presentation.styleId]} ·{' '}
+              {FORMAT_LABELS[presentation.formatId]}
+            </p>
+          </div>
           <Button
             type="button"
-            size="icon-sm"
             variant="outline"
-            disabled
-            aria-label="Размер страницы пока недоступен"
-            title="Размер страницы пока недоступен"
-          >
-            <Expand aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
             size="icon-sm"
-            variant="outline"
-            disabled
-            aria-label="Масштаб пока недоступен"
-            title="Масштаб пока недоступен"
+            onClick={() =>
+              setSettings({
+                recipeId,
+                presentation: { ...DEFAULT_PRESENTATION },
+              })
+            }
+            aria-label="Сбросить настройки оформления"
+            title="Сбросить настройки"
           >
-            <ZoomIn aria-hidden="true" />
+            <RotateCcw aria-hidden="true" />
           </Button>
         </div>
-      </div>
 
-      <div className="flex flex-1 flex-col items-center px-5 py-6 sm:px-8 xl:sticky xl:top-0">
-        <div className="mb-4 w-full max-w-[520px]">
+        <details className="recipe-settings mt-4 rounded-xl border border-border bg-background">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+            <SlidersHorizontal className="size-4" aria-hidden="true" />
+            Стиль и формат
+            <span className="ml-auto text-xs text-muted-foreground">
+              Настроить
+            </span>
+          </summary>
+          <div className="space-y-4 border-t border-border p-3 sm:p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="space-y-1 text-xs font-medium">
+                Стиль
+                <select
+                  value={presentation.styleId}
+                  onChange={(event) =>
+                    update(
+                      'styleId',
+                      event.target.value as RecipePresentation['styleId'],
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {RECIPE_STYLES.map((style) => (
+                    <option key={style} value={style}>
+                      {STYLE_LABELS[style]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-medium">
+                Формат
+                <select
+                  value={presentation.formatId}
+                  onChange={(event) =>
+                    update(
+                      'formatId',
+                      event.target.value as RecipePresentation['formatId'],
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {RECIPE_FORMATS.map((format) => (
+                    <option key={format} value={format}>
+                      {FORMAT_LABELS[format]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {['a4', 'a5'].includes(presentation.formatId) && (
+              <label className="space-y-1 text-xs font-medium">
+                Ориентация
+                <select
+                  value={presentation.orientation}
+                  onChange={(event) =>
+                    update(
+                      'orientation',
+                      event.target.value as RecipePresentation['orientation'],
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <option value="portrait">Книжная</option>
+                  <option value="landscape">Альбомная</option>
+                </select>
+              </label>
+            )}
+            <label className="block space-y-2 text-xs font-medium">
+              Масштаб предпросмотра · {previewWidth}%
+              <input
+                aria-label="Масштаб предпросмотра"
+                type="range"
+                min="65"
+                max="100"
+                step="5"
+                value={previewWidth}
+                onChange={(event) =>
+                  setPreviewWidth(Number(event.target.value))
+                }
+                className="w-full accent-primary"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="space-y-1 text-xs font-medium">
+                Акцент
+                <input
+                  aria-label="Цвет акцента"
+                  type="color"
+                  value={presentation.accentColor}
+                  onChange={(event) =>
+                    update('accentColor', event.target.value)
+                  }
+                  className="h-10 w-full cursor-pointer rounded-lg border border-input bg-background p-1"
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium">
+                Шрифтовая пара
+                <select
+                  value={presentation.fontPair}
+                  onChange={(event) =>
+                    update(
+                      'fontPair',
+                      event.target.value as RecipePresentation['fontPair'],
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <option value="modern">Современная</option>
+                  <option value="editorial">Редакционная</option>
+                  <option value="utility">Рабочая</option>
+                </select>
+              </label>
+            </div>
+            <label className="block space-y-2 text-xs font-medium">
+              Размер текста · {Math.round(presentation.typographyScale * 100)}%
+              <input
+                aria-label="Масштаб типографики"
+                type="range"
+                min="85"
+                max="120"
+                step="5"
+                value={Math.round(presentation.typographyScale * 100)}
+                onChange={(event) =>
+                  update('typographyScale', Number(event.target.value) / 100)
+                }
+                className="w-full accent-primary"
+              />
+            </label>
+            <label className="space-y-1 text-xs font-medium">
+              Заполнение фотографий
+              <select
+                value={presentation.imageFit}
+                onChange={(event) =>
+                  update(
+                    'imageFit',
+                    event.target.value as RecipePresentation['imageFit'],
+                  )
+                }
+                className="h-10 w-full rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <option value="cover">Заполнить рамку</option>
+                <option value="contain">Показать целиком</option>
+              </select>
+            </label>
+            <Toggle
+              label="Фото в начале макета"
+              checked={presentation.imageFirst}
+              onChange={(value) => update('imageFirst', value)}
+            />
+            <div className="border-t border-border pt-2">
+              <p className="mb-1 text-xs font-semibold">Показывать блоки</p>
+              <Toggle
+                label="Пищевая ценность"
+                checked={presentation.showNutrition}
+                onChange={(value) => update('showNutrition', value)}
+              />
+              <Toggle
+                label="Заметки"
+                checked={presentation.showNotes}
+                onChange={(value) => update('showNotes', value)}
+              />
+              <Toggle
+                label="Советы"
+                checked={presentation.showTips}
+                onChange={(value) => update('showTips', value)}
+              />
+              <Toggle
+                label="Фото шагов"
+                checked={presentation.showStepImages}
+                onChange={(value) => update('showStepImages', value)}
+              />
+            </div>
+            <div className="space-y-2 border-t border-border pt-3">
+              <p className="text-xs font-semibold">Мои пресеты</p>
+              <label className="sr-only" htmlFor="recipe-preset-select">
+                Сохранённые пресеты
+              </label>
+              <select
+                id="recipe-preset-select"
+                value={activePreset}
+                onChange={(event) => {
+                  setActivePreset(event.target.value)
+                  const preset = presets.find(
+                    (item) => item.id === event.target.value,
+                  )
+                  if (preset)
+                    setSettings({
+                      recipeId,
+                      presentation: { ...preset.presentation },
+                    })
+                }}
+                className="h-10 w-full rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <option value="">Выберите пресет</option>
+                {presets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                aria-label="Название пресета"
+                value={presetName}
+                onChange={(event) => setPresetName(event.target.value)}
+                placeholder="Название нового пресета"
+                maxLength={40}
+                className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!presetName.trim()}
+                  onClick={savePreset}
+                >
+                  Сохранить как новый
+                </Button>
+                {selectedPreset && (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!presetName.trim()}
+                      onClick={() =>
+                        updatePresets(
+                          presets.map((item) =>
+                            item.id === selectedPreset.id
+                              ? { ...item, name: presetName.trim() }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      Переименовать
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`Удалить пресет ${selectedPreset.name}`}
+                      onClick={() => {
+                        updatePresets(
+                          presets.filter(
+                            (item) => item.id !== selectedPreset.id,
+                          ),
+                        )
+                        setActivePreset('')
+                      }}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </details>
+      </header>
+
+      <div className="flex flex-1 flex-col items-center px-4 py-5 sm:px-6 xl:sticky xl:top-0">
+        <div
+          className="mb-4 w-full"
+          style={{ maxWidth: `${(520 * previewWidth) / 100}px` }}
+        >
           <Button type="button" variant="primary" disabled className="w-full">
             <FileDown aria-hidden="true" />
             Экспортировать
           </Button>
           <p className="mt-2 text-center text-xs leading-5 text-muted-foreground">
-            Экспорт станет доступен в будущих этапах.
+            Экспорт станет доступен в Phase 08.
           </p>
         </div>
-        <article
-          aria-label="Макет 33 Monochrome"
-          className="shell-preview-paper w-full max-w-[520px] rounded-sm border p-6 text-[#191919] shadow-xl sm:p-10"
+        <div
+          className="w-full"
+          style={{ maxWidth: `${(520 * previewWidth) / 100}px` }}
         >
-          <div className="flex items-center justify-between border-b border-black/15 pb-4 text-[10px] font-semibold tracking-[0.2em]">
-            <span>33 RECIPE</span>
-            <span>33 MONOCHROME</span>
-          </div>
-          {!recipe ? (
-            <div className="flex min-h-80 flex-col items-center justify-center text-center">
-              <ScanLine aria-hidden="true" className="size-8 opacity-45" />
-              <p className="mt-5 text-lg font-semibold">
-                Выберите или создайте рецепт
-              </p>
-              <p className="mt-2 max-w-xs text-xs leading-5 opacity-65">
-                Текущая версия рецепта будет отображаться здесь.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-8 pt-7">
-              {cover && imageUrls[cover.id] && (
-                <img
-                  src={imageUrls[cover.id]}
-                  alt={cover.altText || recipe.title || 'Обложка рецепта'}
-                  className="max-h-80 w-full object-cover"
-                />
-              )}
-              <header>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-55">
-                  {recipe.category || 'Рецепт'}
-                </p>
-                <h3 className="mt-3 break-words text-3xl font-semibold leading-tight tracking-[-0.05em] sm:text-4xl">
-                  {recipe.title || 'Без названия'}
-                </h3>
-                {recipe.description && (
-                  <p className="mt-4 max-w-prose text-sm leading-6 opacity-75">
-                    {recipe.description}
-                  </p>
-                )}
-              </header>
-              {!!gallery?.length && (
-                <div className="grid grid-cols-2 gap-2">
-                  {gallery.map((asset) => (
-                    <img
-                      key={asset.id}
-                      src={imageUrls[asset.id]}
-                      alt={asset.altText || 'Фотография рецепта'}
-                      className="max-h-56 w-full object-cover"
-                    />
-                  ))}
-                </div>
-              )}
-              {hasFacts && (
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-black/15 py-4 text-xs sm:grid-cols-4">
-                  {recipe.servings !== undefined && (
-                    <div>
-                      <dt className="uppercase tracking-wider opacity-50">
-                        Порции
-                      </dt>
-                      <dd className="mt-1 font-medium">{recipe.servings}</dd>
-                    </div>
-                  )}
-                  {recipe.preparationTimeMinutes !== undefined && (
-                    <div>
-                      <dt className="uppercase tracking-wider opacity-50">
-                        Подготовка
-                      </dt>
-                      <dd className="mt-1 font-medium">
-                        {recipe.preparationTimeMinutes} мин
-                      </dd>
-                    </div>
-                  )}
-                  {recipe.cookingTimeMinutes !== undefined && (
-                    <div>
-                      <dt className="uppercase tracking-wider opacity-50">
-                        Готовка
-                      </dt>
-                      <dd className="mt-1 font-medium">
-                        {recipe.cookingTimeMinutes} мин
-                      </dd>
-                    </div>
-                  )}
-                  {recipe.difficulty && (
-                    <div>
-                      <dt className="uppercase tracking-wider opacity-50">
-                        Сложность
-                      </dt>
-                      <dd className="mt-1 font-medium">
-                        {difficulties[recipe.difficulty]}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              )}
-              {recipe.ingredientGroups.some((group) =>
-                group.ingredients.some((item) => item.name.trim()),
-              ) && (
-                <section>
-                  <h4 className="border-b border-black/15 pb-2 text-sm font-semibold tracking-tight">
-                    Ингредиенты
-                  </h4>
-                  <div className="space-y-5 pt-4">
-                    {recipe.ingredientGroups.map((group) => {
-                      const items = group.ingredients.filter((item) =>
-                        item.name.trim(),
-                      )
-                      return items.length ? (
-                        <div key={group.id}>
-                          {group.title && (
-                            <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider opacity-55">
-                              {group.title}
-                            </h5>
-                          )}
-                          <ul className="space-y-2">
-                            {items.map((item) => (
-                              <li
-                                key={item.id}
-                                className="flex justify-between gap-4 border-b border-black/10 pb-2 text-sm"
-                              >
-                                <span>
-                                  {item.name}
-                                  {item.note && (
-                                    <span className="ml-1 text-xs opacity-60">
-                                      {item.note}
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="shrink-0 text-right tabular-nums">
-                                  {item.amount !== undefined &&
-                                    `${new Intl.NumberFormat('ru-RU').format(item.amount)} `}
-                                  {item.unit.kind === 'custom'
-                                    ? item.unit.label
-                                    : units[item.unit.code]}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null
-                    })}
-                  </div>
-                </section>
-              )}
-              {recipe.steps.some(
-                (step) => step.instruction.trim() || step.title?.trim(),
-              ) && (
-                <section>
-                  <h4 className="border-b border-black/15 pb-2 text-sm font-semibold tracking-tight">
-                    Приготовление
-                  </h4>
-                  <ol className="space-y-6 pt-4">
-                    {recipe.steps.map((step, index) =>
-                      step.instruction.trim() || step.title?.trim() ? (
-                        <li
-                          key={step.id}
-                          className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3"
-                        >
-                          <span className="pt-0.5 text-xs font-semibold tabular-nums opacity-45">
-                            {String(index + 1).padStart(2, '0')}
-                          </span>
-                          <div>
-                            {step.title && (
-                              <h5 className="mb-1 text-sm font-semibold">
-                                {step.title}
-                              </h5>
-                            )}
-                            <p className="whitespace-pre-wrap text-sm leading-6">
-                              {step.instruction}
-                            </p>
-                            {(step.durationMinutes !== undefined ||
-                              step.temperatureCelsius !== undefined) && (
-                              <p className="mt-2 text-xs opacity-55">
-                                {[
-                                  step.durationMinutes !== undefined &&
-                                    `${step.durationMinutes} мин`,
-                                  step.temperatureCelsius !== undefined &&
-                                    `${step.temperatureCelsius} °C`,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' · ')}
-                              </p>
-                            )}
-                            {step.note && (
-                              <p className="mt-2 text-xs italic opacity-65">
-                                {step.note}
-                              </p>
-                            )}
-                            {step.assetIds?.map((id) => {
-                              const asset = recipe.assets.find(
-                                (item) => item.id === id,
-                              )
-                              return (
-                                imageUrls[id] && (
-                                  <img
-                                    key={id}
-                                    src={imageUrls[id]}
-                                    alt={asset?.altText || `Шаг ${index + 1}`}
-                                    className="mt-3 max-h-64 w-full object-cover"
-                                  />
-                                )
-                              )
-                            })}
-                          </div>
-                        </li>
-                      ) : null,
-                    )}
-                  </ol>
-                </section>
-              )}
-              {recipe.tips.trim() && (
-                <section className="border-l-2 border-black pl-4">
-                  <h4 className="text-sm font-semibold">Совет</h4>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
-                    {recipe.tips}
-                  </p>
-                </section>
-              )}
-              {recipe.nutrition &&
-                Object.entries(recipe.nutrition).some(
-                  ([key, value]) => key !== 'basis' && value !== undefined,
-                ) && (
-                  <section>
-                    <h4 className="border-b border-black/15 pb-2 text-sm font-semibold">
-                      Пищевая ценность
-                    </h4>
-                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                      {[
-                        ['calories', 'ккал'],
-                        ['protein', 'белки'],
-                        ['fat', 'жиры'],
-                        ['carbohydrates', 'углеводы'],
-                      ].map(([key, label]) => {
-                        const value =
-                          recipe.nutrition?.[
-                            key as
-                              'calories' | 'protein' | 'fat' | 'carbohydrates'
-                          ]
-                        return value === undefined ? null : (
-                          <span key={key}>
-                            <strong>
-                              {new Intl.NumberFormat('ru-RU').format(value)}
-                            </strong>{' '}
-                            {label}
-                          </span>
-                        )
-                      })}
-                    </div>
-                  </section>
-                )}
-              {recipe.notes.trim() && (
-                <p className="border-t border-black/15 pt-4 text-xs leading-5 opacity-65">
-                  {recipe.notes}
-                </p>
-              )}
-              <footer className="border-t border-black/15 pt-4 text-[9px] tracking-[0.16em] opacity-45">
-                33 RECIPE · MONOCHROME
-              </footer>
-            </div>
-          )}
-        </article>
+          <RecipeRenderer
+            recipe={recipe}
+            imageUrls={imageUrls}
+            presentation={presentation}
+          />
+        </div>
       </div>
     </aside>
   )

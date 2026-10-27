@@ -1,9 +1,11 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { PreviewPanel } from '@/components/shell/PreviewPanel'
 import { pizzaRecipe } from '@/features/recipes/model/__fixtures__/recipes'
 
 describe('live recipe preview', () => {
+  beforeEach(() => localStorage.clear())
+
   it('renders current recipe content and omits optional sections when empty', () => {
     const live = {
       ...pizzaRecipe,
@@ -16,7 +18,9 @@ describe('live recipe preview', () => {
     expect(screen.getByText('Актуальное название')).toBeInTheDocument()
     expect(screen.getByText('Ингредиенты')).toBeInTheDocument()
     expect(screen.queryByText('Совет')).not.toBeInTheDocument()
-    expect(screen.queryByText('Пищевая ценность')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Пищевая ценность' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the empty state without a selected recipe and has no forced page height', () => {
@@ -81,5 +85,96 @@ describe('live recipe preview', () => {
     expect(screen.getByText('Новый ингредиент')).toBeInTheDocument()
     const steps = container.querySelectorAll('ol > li')
     expect(steps[0]).toHaveTextContent(pizzaRecipe.steps.at(-1)!.instruction)
+  })
+
+  it('switches through distinct styles and keeps the source recipe unchanged', () => {
+    const source = structuredClone(pizzaRecipe)
+    render(<PreviewPanel recipe={pizzaRecipe} imageUrls={{}} />)
+    const style = screen.getByLabelText('Стиль')
+    for (const value of [
+      'editorial',
+      'restaurant',
+      'vintage',
+      'japanese',
+      'chef-sheet',
+      'monochrome',
+    ]) {
+      fireEvent.change(style, { target: { value } })
+      expect(
+        document.querySelector(`.recipe-style-${value}`),
+      ).toBeInTheDocument()
+    }
+    expect(pizzaRecipe).toEqual(source)
+  })
+
+  it('supports print orientation and the responsive two-page book spread', () => {
+    render(<PreviewPanel recipe={pizzaRecipe} imageUrls={{}} />)
+    fireEvent.change(screen.getByLabelText('Формат'), {
+      target: { value: 'a4' },
+    })
+    fireEvent.change(screen.getByLabelText('Ориентация'), {
+      target: { value: 'landscape' },
+    })
+    expect(
+      document.querySelector('[data-orientation="landscape"]'),
+    ).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Формат'), {
+      target: { value: 'book-spread' },
+    })
+    expect(document.querySelector('.recipe-book-spread')).toBeInTheDocument()
+    expect(screen.getByText('Итальянская пицца')).toBeInTheDocument()
+    expect(screen.getByText('Приготовление')).toBeInTheDocument()
+  })
+
+  it('restores appearance after remount and keeps long recipe content visible', () => {
+    const longRecipe = {
+      ...pizzaRecipe,
+      steps: Array.from({ length: 22 }, (_, index) => ({
+        ...pizzaRecipe.steps[index % pizzaRecipe.steps.length],
+        id: `long-step-${index}`,
+        instruction: `Длинный способ приготовления ${index}: ${'текст '.repeat(36)}`,
+      })),
+    }
+    const view = render(<PreviewPanel recipe={longRecipe} imageUrls={{}} />)
+    fireEvent.change(screen.getByLabelText('Формат'), {
+      target: { value: 'a5' },
+    })
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Предпросмотр показывает всё содержимое',
+    )
+    view.unmount()
+    render(<PreviewPanel recipe={longRecipe} imageUrls={{}} />)
+    expect(screen.getByLabelText('Формат')).toHaveValue('a5')
+    expect(document.querySelectorAll('.recipe-step-content')).toHaveLength(22)
+  })
+
+  it('saves, applies, renames and deletes a presentation preset', () => {
+    render(<PreviewPanel recipe={pizzaRecipe} imageUrls={{}} />)
+    fireEvent.click(screen.getByText('Стиль и формат'))
+    fireEvent.change(screen.getByLabelText('Стиль'), {
+      target: { value: 'vintage' },
+    })
+    fireEvent.change(screen.getByLabelText('Название пресета'), {
+      target: { value: 'Тёплая книга' },
+    })
+    fireEvent.click(screen.getByText('Сохранить как новый'))
+    const presetSelect = screen.getByLabelText('Сохранённые пресеты')
+    expect((presetSelect as HTMLSelectElement).value).not.toBe('')
+    fireEvent.change(screen.getByLabelText('Стиль'), {
+      target: { value: 'monochrome' },
+    })
+    fireEvent.change(presetSelect, {
+      target: { value: (presetSelect as HTMLSelectElement).options[1].value },
+    })
+    expect(screen.getByLabelText('Стиль')).toHaveValue('vintage')
+    fireEvent.change(screen.getByLabelText('Название пресета'), {
+      target: { value: 'Винтаж' },
+    })
+    fireEvent.click(screen.getByText('Переименовать'))
+    expect(screen.getByRole('option', { name: 'Винтаж' })).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Удалить пресет Винтаж'))
+    expect(
+      screen.queryByRole('option', { name: 'Винтаж' }),
+    ).not.toBeInTheDocument()
   })
 })
