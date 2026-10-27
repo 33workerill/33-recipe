@@ -273,7 +273,7 @@ export function WorkspacePage({
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
-                {import.meta.env.DEV && section === 'recipes' && (
+                {section === 'recipes' && (
                   <Button type="button" variant="outline" onClick={onAddDemo}>
                     <FlaskConical /> Добавить тестовый рецепт
                   </Button>

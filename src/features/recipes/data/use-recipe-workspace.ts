@@ -267,7 +267,6 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
   }, [repo, prepareSwitch, replaceCurrent, markRecent, refresh])
 
   const addDemoRecipe = useCallback(() => {
-    if (!import.meta.env.DEV) return Promise.resolve()
     if (demoCreationRef.current) return demoCreationRef.current
     const operation = (async () => {
       await prepareSwitch()
