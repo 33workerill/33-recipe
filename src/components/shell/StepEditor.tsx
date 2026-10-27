@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ImagePlus, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,9 +13,17 @@ import {
 export function StepEditor({
   recipe,
   change,
+  imageUrls,
+  onAddPhoto,
+  onRemovePhoto,
+  onRemoveStep,
 }: {
   recipe: Recipe
   change: (mutator: (recipe: Recipe) => void) => void
+  imageUrls: Record<string, string>
+  onAddPhoto: (file: File, stepId: string) => Promise<void>
+  onRemovePhoto: (id: string) => Promise<void>
+  onRemoveStep: (id: string) => Promise<void>
 }) {
   const updateStep = (index: number, update: (step: CookingStep) => void) =>
     change((draft) => update(draft.steps[index]))
@@ -69,9 +77,7 @@ export function StepEditor({
                 aria-label={`Удалить шаг ${index + 1}`}
                 onClick={() => {
                   if (window.confirm(`Удалить шаг ${index + 1}?`))
-                    change((draft) => {
-                      draft.steps.splice(index, 1)
-                    })
+                    void onRemoveStep(step.id).catch(() => undefined)
                 }}
               >
                 <Trash2 />
@@ -79,6 +85,55 @@ export function StepEditor({
             </div>
           </div>
           <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {step.assetIds?.map((id) => {
+                const asset = recipe.assets.find((item) => item.id === id)
+                if (!asset) return null
+                return (
+                  <div
+                    key={id}
+                    className="flex items-center gap-2 rounded-lg border border-border p-2"
+                  >
+                    {imageUrls[id] ? (
+                      <img
+                        src={imageUrls[id]}
+                        alt={asset.altText || `Фотография шага ${index + 1}`}
+                        className="size-16 rounded object-cover"
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        Файл недоступен
+                      </span>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        void onRemovePhoto(id).catch(() => undefined)
+                      }
+                    >
+                      Удалить фото
+                    </Button>
+                  </div>
+                )
+              })}
+              <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-muted">
+                <ImagePlus className="size-4" /> Фото шага
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,.heic,.heif"
+                  className="sr-only"
+                  aria-label={`Добавить фото к шагу ${index + 1}`}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file)
+                      void onAddPhoto(file, step.id).catch(() => undefined)
+                    event.target.value = ''
+                  }}
+                />
+              </label>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor={`step-title-${step.id}`}>Заголовок шага</Label>
               <Input

@@ -124,11 +124,44 @@ function App() {
                       void workspace.flush().catch(() => undefined)
                     }}
                     onCreate={create}
+                    imageUrls={workspace.imageUrls}
+                    onAddImage={workspace.saveImage}
+                    onRemoveImage={workspace.removeImage}
+                    onRemoveStep={workspace.removeStep}
+                    onAltChange={workspace.updateImageAlt}
+                    onReorderImage={(id, offset) =>
+                      workspace.edit((recipe) => {
+                        const gallery = recipe.assets.filter(
+                          (asset) => asset.role === 'gallery',
+                        )
+                        const galleryIndex = gallery.findIndex(
+                          (asset) => asset.id === id,
+                        )
+                        const target = galleryIndex + offset
+                        if (
+                          galleryIndex < 0 ||
+                          target < 0 ||
+                          target >= gallery.length
+                        )
+                          return
+                        const from = recipe.assets.findIndex(
+                          (asset) => asset.id === gallery[galleryIndex].id,
+                        )
+                        const to = recipe.assets.findIndex(
+                          (asset) => asset.id === gallery[target].id,
+                        )
+                        const [asset] = recipe.assets.splice(from, 1)
+                        recipe.assets.splice(to, 0, asset)
+                      })
+                    }
                   />
                 </NumericValidityContext.Provider>
               </div>
               <div className={panel === 'editor' ? 'hidden xl:block' : ''}>
-                <PreviewPanel />
+                <PreviewPanel
+                  recipe={workspace.current?.recipe ?? null}
+                  imageUrls={workspace.imageUrls}
+                />
               </div>
             </div>
           </>

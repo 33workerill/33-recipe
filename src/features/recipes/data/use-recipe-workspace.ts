@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createEmptyRecipe, type Recipe } from '@/features/recipes/model'
 import { createBackup, parseBackup } from '@/features/recipes/data/backup'
 import { duplicateRecipe } from '@/features/recipes/data/duplicate'
+import { processImageFile } from '@/features/recipes/data/image-file'
 import {
   RecipeRepository,
+  type StoredImage,
   type StoredRecipe,
 } from '@/features/recipes/data/repository'
+import type { MediaAsset } from '@/features/recipes/model'
 
 const RECENT_KEY = '33-recipe-recent-ids'
 export type SaveStatus = 'changes' | 'saving' | 'saved' | 'error'
@@ -44,12 +47,17 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
   const [status, setStatus] = useState<SaveStatus>('saved')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
+  const imageIds = current
+    ? `${current.recipe.id}:${current.recipe.assets.map((asset) => asset.id).join('|')}`
+    : ''
   const currentRef = useRef<StoredRecipe | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inFlightRef = useRef<Promise<void> | null>(null)
   const editSeqRef = useRef(0)
   const savedSeqRef = useRef(0)
   const invalidInputsRef = useRef(new Set<string>())
+  const seenImageSelectionsRef = useRef(new Map<string, string | null>())
 
   const replaceCurrent = useCallback((value: StoredRecipe | null) => {
     currentRef.current = value
@@ -76,6 +84,33 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
       })
       .finally(() => setLoading(false))
   }, [refresh])
+
+  useEffect(() => {
+    let cancelled = false
+    const urls: Record<string, string> = {}
+    const ids = imageIds
+      ? imageIds.split(':').slice(1).join(':').split('|').filter(Boolean)
+      : []
+    void Promise.all(
+      ids.map(async (id) => [id, await repo.getImage(id)] as const),
+    )
+      .then((images) => {
+        if (cancelled) return
+        for (const [id, image] of images)
+          if (image) urls[id] = URL.createObjectURL(image.blob)
+        setImageUrls(urls)
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setError(describeError(cause))
+          setStatus('error')
+        }
+      })
+    return () => {
+      cancelled = true
+      Object.values(urls).forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [imageIds, repo])
 
   const markRecent = useCallback((id: string) => {
     setRecentIds((previous) => {
@@ -249,12 +284,211 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
       await prepareSwitch()
       const source = await repo.get(id)
       if (!source) throw new Error('Рецепт не найден.')
-      const saved = await repo.save(duplicateRecipe(source.recipe), null)
+      const saved = await repo.duplicateWithImages(
+        source.recipe,
+        duplicateRecipe(source.recipe),
+      )
       replaceCurrent(saved)
       markRecent(saved.recipe.id)
       await refresh()
     },
     [repo, prepareSwitch, replaceCurrent, markRecent, refresh],
+  )
+
+  const saveImage = useCallback(
+    async (
+      file: File,
+      role: MediaAsset['role'],
+      stepId?: string,
+      replaceId?: string,
+    ) => {
+      await flush()
+      const existing = currentRef.current
+      if (!existing) throw new Error('Сначала создайте или откройте рецепт.')
+      const selectionKey = `${existing.recipe.id}|${file.name}|${file.size}|${file.lastModified}`
+      if (seenImageSelectionsRef.current.has(selectionKey)) return
+      seenImageSelectionsRef.current.set(selectionKey, null)
+      let processed: Awaited<ReturnType<typeof processImageFile>>
+      try {
+        processed = await processImageFile(file)
+      } catch (cause) {
+        seenImageSelectionsRef.current.delete(selectionKey)
+        throw cause
+      }
+      const latest = currentRef.current
+      if (!latest || latest.recipe.id !== existing.recipe.id) {
+        seenImageSelectionsRef.current.delete(selectionKey)
+        throw new Error(
+          'Рецепт изменился во время обработки фотографии. Повторите загрузку.',
+        )
+      }
+      let repeated: StoredImage | null
+      try {
+        repeated = await repo.findImageByFingerprint(
+          latest.recipe.id,
+          processed.fingerprint,
+        )
+      } catch (cause) {
+        seenImageSelectionsRef.current.delete(selectionKey)
+        throw cause
+      }
+      const repeatedAsset = repeated
+        ? latest.recipe.assets.find((asset) => asset.id === repeated.id)
+        : undefined
+      if (repeated && repeatedAsset?.role === role) {
+        seenImageSelectionsRef.current.set(selectionKey, repeated.id)
+        if (role === 'step' && stepId) {
+          const recipe = structuredClone(latest.recipe)
+          const step = recipe.steps.find((item) => item.id === stepId)
+          if (!step) {
+            seenImageSelectionsRef.current.delete(selectionKey)
+            throw new Error('Шаг приготовления не найден.')
+          }
+          if (!step.assetIds?.includes(repeated.id)) {
+            step.assetIds = [...(step.assetIds ?? []), repeated.id]
+            try {
+              const saved = await repo.save(recipe, latest.revision)
+              replaceCurrent(saved)
+              await refresh()
+              setStatus('saved')
+              setError(null)
+            } catch (cause) {
+              seenImageSelectionsRef.current.delete(selectionKey)
+              setStatus('error')
+              setError(describeError(cause))
+              throw cause
+            }
+          }
+        }
+        return
+      }
+      const asset: MediaAsset = {
+        id: crypto.randomUUID(),
+        filename: processed.filename,
+        mimeType: processed.mimeType,
+        width: processed.width,
+        height: processed.height,
+        altText: '',
+        role,
+      }
+      const recipe = structuredClone(latest.recipe)
+      if (role === 'cover' && replaceId) {
+        recipe.assets = recipe.assets.filter((item) => item.id !== replaceId)
+        recipe.steps.forEach((step) => {
+          if (step.assetIds)
+            step.assetIds = step.assetIds.filter((id) => id !== replaceId)
+        })
+      }
+      recipe.assets.push(asset)
+      if (stepId) {
+        const step = recipe.steps.find((item) => item.id === stepId)
+        if (!step) {
+          seenImageSelectionsRef.current.delete(selectionKey)
+          throw new Error('Шаг приготовления не найден.')
+        }
+        step.assetIds = [...(step.assetIds ?? []), asset.id]
+      }
+      setStatus('saving')
+      try {
+        const image: StoredImage = {
+          id: asset.id,
+          recipeId: recipe.id,
+          blob: processed.blob,
+          fingerprint: processed.fingerprint,
+        }
+        const saved = await repo.saveImage(
+          recipe,
+          latest.revision,
+          image,
+          replaceId ? [replaceId] : [],
+        )
+        editSeqRef.current = 0
+        savedSeqRef.current = 0
+        seenImageSelectionsRef.current.set(selectionKey, asset.id)
+        replaceCurrent(saved)
+        await refresh()
+        setStatus('saved')
+        setError(null)
+      } catch (cause) {
+        seenImageSelectionsRef.current.delete(selectionKey)
+        setStatus('error')
+        setError(describeError(cause))
+        throw cause
+      }
+    },
+    [flush, repo, refresh, replaceCurrent],
+  )
+
+  const removeImage = useCallback(
+    async (id: string) => {
+      await flush()
+      const existing = currentRef.current
+      if (!existing) return
+      const recipe = structuredClone(existing.recipe)
+      recipe.assets = recipe.assets.filter((asset) => asset.id !== id)
+      recipe.steps.forEach((step) => {
+        if (step.assetIds)
+          step.assetIds = step.assetIds.filter((assetId) => assetId !== id)
+      })
+      const saved = await repo.deleteImage(recipe, existing.revision, id)
+      for (const [key, value] of seenImageSelectionsRef.current) {
+        if (value === id) seenImageSelectionsRef.current.delete(key)
+      }
+      editSeqRef.current = 0
+      savedSeqRef.current = 0
+      replaceCurrent(saved)
+      await refresh()
+      setStatus('saved')
+      setError(null)
+    },
+    [flush, repo, refresh, replaceCurrent],
+  )
+
+  const removeStep = useCallback(
+    async (stepId: string) => {
+      await flush()
+      const existing = currentRef.current
+      if (!existing) return
+      const recipe = structuredClone(existing.recipe)
+      const index = recipe.steps.findIndex((step) => step.id === stepId)
+      if (index < 0) return
+      const stepImageIds = recipe.steps[index].assetIds ?? []
+      recipe.steps.splice(index, 1)
+      const referencedIds = new Set(
+        recipe.steps.flatMap((step) => step.assetIds ?? []),
+      )
+      const imageIds = stepImageIds.filter((id) => !referencedIds.has(id))
+      recipe.assets = recipe.assets.filter(
+        (asset) => !imageIds.includes(asset.id),
+      )
+      try {
+        const saved = await repo.deleteImages(
+          recipe,
+          existing.revision,
+          imageIds,
+        )
+        editSeqRef.current = 0
+        savedSeqRef.current = 0
+        replaceCurrent(saved)
+        await refresh()
+        setStatus('saved')
+        setError(null)
+      } catch (cause) {
+        setStatus('error')
+        setError(describeError(cause))
+        throw cause
+      }
+    },
+    [flush, repo, refresh, replaceCurrent],
+  )
+
+  const updateImageAlt = useCallback(
+    (id: string, altText: string) =>
+      edit((recipe) => {
+        const asset = recipe.assets.find((item) => item.id === id)
+        if (asset) asset.altText = altText
+      }),
+    [edit],
   )
 
   const exportBackup = useCallback(async () => {
@@ -303,6 +537,7 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
   return {
     recipes,
     current,
+    imageUrls,
     recentIds,
     status,
     error,
@@ -314,6 +549,10 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
     create,
     remove,
     duplicate,
+    saveImage,
+    removeImage,
+    removeStep,
+    updateImageAlt,
     exportBackup,
     importBackup,
     reportError,

@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { IngredientEditor } from '@/components/shell/IngredientEditor'
 import { NumericField } from '@/components/shell/NumericField'
 import { StepEditor } from '@/components/shell/StepEditor'
+import { ImageManager } from '@/components/shell/ImageManager'
 import type { SaveStatus } from '@/features/recipes/data/use-recipe-workspace'
 import {
   validateCompleteRecipe,
@@ -35,6 +36,17 @@ type Props = {
   onChange: (change: (recipe: Recipe) => void) => void
   onSave: () => void
   onCreate: () => void
+  imageUrls: Record<string, string>
+  onAddImage: (
+    file: File,
+    role: 'cover' | 'gallery' | 'step',
+    stepId?: string,
+    replaceId?: string,
+  ) => Promise<void>
+  onRemoveImage: (id: string) => Promise<void>
+  onRemoveStep: (id: string) => Promise<void>
+  onAltChange: (id: string, value: string) => void
+  onReorderImage: (id: string, offset: -1 | 1) => void
 }
 
 function EditorSection({
@@ -329,6 +341,12 @@ export function EditorWorkspace({
   onChange,
   onSave,
   onCreate,
+  imageUrls,
+  onAddImage,
+  onRemoveImage,
+  onRemoveStep,
+  onAltChange,
+  onReorderImage,
 }: Props) {
   const complete = recipe ? validateCompleteRecipe(recipe) : null
   const draft = recipe ? validateDraftRecipe(recipe) : null
@@ -515,7 +533,14 @@ export function EditorWorkspace({
               description="Нумерованные шаги в нужном порядке"
               icon={<ListOrdered aria-hidden="true" className="size-5" />}
             >
-              <StepEditor recipe={recipe} change={onChange} />
+              <StepEditor
+                recipe={recipe}
+                change={onChange}
+                imageUrls={imageUrls}
+                onAddPhoto={(file, stepId) => onAddImage(file, 'step', stepId)}
+                onRemovePhoto={onRemoveImage}
+                onRemoveStep={onRemoveStep}
+              />
             </EditorSection>
             <EditorSection
               value="photos"
@@ -524,9 +549,16 @@ export function EditorWorkspace({
               description="Изображения блюда и этапов"
               icon={<Camera aria-hidden="true" className="size-5" />}
             >
-              <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                Загрузка фотографий появится на следующем этапе Fast Track.
-              </div>
+              <ImageManager
+                recipe={recipe}
+                urls={imageUrls}
+                onAdd={(file, role, replaceId) =>
+                  onAddImage(file, role, undefined, replaceId)
+                }
+                onRemove={onRemoveImage}
+                onAltChange={onAltChange}
+                onReorder={(id, offset) => onReorderImage(id, offset)}
+              />
             </EditorSection>
             <EditorSection
               value="extra"
