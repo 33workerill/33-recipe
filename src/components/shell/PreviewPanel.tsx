@@ -48,11 +48,10 @@ export function PreviewPanel({
   )
   const pageWidth = geometry.widthMm * pxPerMm
   const pageHeight = geometry.adaptive ? 900 : geometry.heightMm * pxPerMm
+  const isWideScreen = typeof window === 'undefined' || window.innerWidth >= 640
   const activePageIndex = Math.min(pageIndex, pages - 1)
   const visibleSides: Array<'front' | 'back'> =
-    duplex &&
-    duplexView === 'both' &&
-    (viewport.width === 0 || viewport.width >= 640)
+    duplex && duplexView === 'both' && isWideScreen
       ? ['front', 'back']
       : [duplexView === 'back' ? 'back' : 'front']
 
@@ -161,7 +160,7 @@ export function PreviewPanel({
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <div
-            className="flex items-center gap-1"
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-1"
             role="group"
             aria-label="Масштаб страницы"
           >

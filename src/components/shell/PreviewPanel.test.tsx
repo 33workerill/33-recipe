@@ -62,6 +62,24 @@ describe('recipe preview and presentation controls', () => {
     expect(container.querySelectorAll('.recipe-paper')).toHaveLength(2)
   })
 
+  it('keeps recipe overview on the front and supplemental nutrition on the back', () => {
+    const { container } = render(
+      <PreviewPanel
+        recipe={createDemoRecipe()}
+        imageUrls={{}}
+        presentation={{ ...DEFAULT_PRESENTATION, formatId: 'a4-duplex' }}
+      />,
+    )
+    const front = container.querySelector('[data-side="front"]')
+    expect(front).toHaveTextContent('Пицца Маргарита — ТЕСТ')
+    expect(front).not.toHaveTextContent('Пищевая ценность')
+    fireEvent.click(screen.getByRole('button', { name: 'Оборотная' }))
+    const back = container.querySelector('[data-side="back"]')
+    expect(back).toHaveTextContent('Ингредиенты')
+    expect(back).toHaveTextContent('Приготовление')
+    expect(back).toHaveTextContent('Пищевая ценность')
+  })
+
   it('keeps all long step fragments reachable through page navigation', () => {
     const recipe = {
       ...pizzaRecipe,

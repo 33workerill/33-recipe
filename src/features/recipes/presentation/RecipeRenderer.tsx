@@ -331,7 +331,9 @@ export function RecipeRenderer({
           )}
         </div>
       )}
-      {pageIndex === 0 && <Nutrition recipe={recipe} />}
+      {pageIndex === 0 && !duplex && presentation.showNutrition && (
+        <Nutrition recipe={recipe} />
+      )}
     </>
   ) : (
     <>
@@ -377,7 +379,7 @@ export function RecipeRenderer({
       {plan?.extras.map((extra) => (
         <ExtraBlock key={extra.kind} {...extra} />
       ))}
-      {pageIndex === 0 && !duplex && presentation.showNutrition && (
+      {pageIndex === 0 && presentation.showNutrition && (
         <Nutrition recipe={recipe} />
       )}
     </>
