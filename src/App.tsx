@@ -7,6 +7,7 @@ import type { WorkspaceSection } from '@/components/shell/navigation'
 import { Button } from '@/components/ui/button'
 import { NumericValidityContext } from '@/components/shell/numeric-validity-context'
 import { useRecipeWorkspace } from '@/features/recipes/data/use-recipe-workspace'
+import { useRecipePresentation } from '@/features/recipes/presentation'
 
 type WorkspacePanel = 'editor' | 'preview'
 
@@ -15,6 +16,9 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [panel, setPanel] = useState<WorkspacePanel>('editor')
   const workspace = useRecipeWorkspace()
+  const [presentation, setPresentation] = useRecipePresentation(
+    workspace.current?.recipe.id,
+  )
 
   const navigate = (next: WorkspaceSection) => {
     void workspace
@@ -164,6 +168,8 @@ function App() {
                         recipe.assets.splice(to, 0, asset)
                       })
                     }
+                    presentation={presentation}
+                    onPresentationChange={setPresentation}
                   />
                 </NumericValidityContext.Provider>
               </div>
@@ -171,6 +177,7 @@ function App() {
                 <PreviewPanel
                   recipe={workspace.current?.recipe ?? null}
                   imageUrls={workspace.imageUrls}
+                  presentation={presentation}
                 />
               </div>
             </div>

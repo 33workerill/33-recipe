@@ -180,49 +180,30 @@
     --ink: #242321;
     --muted-ink: #6a6862;
     --rule: color-mix(in srgb, var(--ink), transparent 82%);
-    width: 100%;
-    min-height: 0;
+    box-sizing: border-box;
+    width: var(--page-width, 210mm);
+    height: var(--page-height, 297mm);
+    min-height: var(--page-height, 0);
+    flex: none;
+    position: relative;
     margin-inline: auto;
-    aspect-ratio: 210 / 297;
     overflow-wrap: anywhere;
     border: 1px solid color-mix(in srgb, var(--ink), transparent 82%);
     border-radius: 2px;
     background: var(--paper);
     color: var(--ink);
-    padding: clamp(1.15rem, 5vw, 2.65rem);
+    padding: 12mm;
     box-shadow: 0 18px 44px rgb(24 22 18 / 12%);
     font-family: var(--recipe-font, ui-sans-serif, system-ui, sans-serif);
-    font-size: calc(0.9rem * var(--recipe-scale, 1));
-    line-height: 1.65;
-  }
-  .recipe-paper[data-orientation='landscape'].recipe-format-a4 {
-    aspect-ratio: 297 / 210;
-  }
-  .recipe-paper[data-orientation='landscape'].recipe-format-a5 {
-    aspect-ratio: 210 / 148;
-  }
-  .recipe-paper.recipe-format-a5 {
-    aspect-ratio: 148 / 210;
-  }
-  .recipe-paper.recipe-format-story {
-    aspect-ratio: 9 / 16;
-  }
-  .recipe-paper.recipe-format-note {
-    aspect-ratio: 4 / 5;
-  }
-  .recipe-paper.recipe-format-square {
-    aspect-ratio: 1;
-  }
-  .recipe-paper.recipe-format-mini-card {
-    aspect-ratio: 3 / 4;
+    font-size: calc(10pt * var(--recipe-scale, 1));
+    line-height: 1.42;
   }
   .recipe-paper.recipe-format-long-note {
-    aspect-ratio: auto;
-    min-height: 44rem;
+    height: auto;
+    min-height: 186mm;
   }
   .recipe-paper.recipe-format-book-spread {
-    max-width: 760px;
-    aspect-ratio: 1.42;
+    padding: 10mm;
   }
   .recipe-paper.recipe-font-editorial {
     --recipe-font: Georgia, 'Times New Roman', serif;
@@ -266,26 +247,335 @@
     font-size: 0.88rem;
     font-weight: 650;
   }
-  .recipe-paper-brand,
-  .recipe-paper-footer {
+  .recipe-page-content {
     display: flex;
-    justify-content: space-between;
-    gap: 1rem;
+    box-sizing: border-box;
+    height: calc(100% - 8mm);
+    min-height: 0;
+    flex-direction: column;
+    gap: 5mm;
+  }
+  .recipe-page-number {
+    position: absolute;
+    right: 12mm;
+    bottom: 7mm;
     color: var(--muted-ink);
-    font-size: 0.62rem;
+    font-size: 7pt;
+    font-variant-numeric: tabular-nums;
+  }
+  .recipe-front-composition {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+    align-items: center;
+    gap: 5mm;
+  }
+  .recipe-front-composition.recipe-photo-last .recipe-cover {
+    order: 3;
+  }
+  .recipe-format-book-spread .recipe-main-columns {
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .recipe-format-book-spread .recipe-ingredients {
+    padding-right: 8mm;
+  }
+  .recipe-format-book-spread .recipe-method {
+    border-left: 0.3mm solid var(--rule);
+    padding-left: 8mm;
+  }
+  .recipe-continuation-title {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 3mm;
+    font-family: Georgia, serif;
+    font-size: 14pt;
+  }
+  .recipe-side-front .recipe-front-composition {
+    grid-template-columns: 1fr;
+  }
+  .recipe-side-front .recipe-cover {
+    max-height: 145mm;
+    aspect-ratio: 1.4;
+  }
+  .recipe-intro h1 {
+    max-width: 16ch;
+    margin-top: 2mm;
+    font-size: clamp(22pt, 4.2vw, 36pt);
+    font-weight: 650;
+    line-height: 1.02;
+    letter-spacing: -0.055em;
+  }
+  .recipe-description {
+    margin-top: 3mm !important;
+  }
+  .recipe-kicker {
+    color: var(--recipe-accent);
+    font-size: 8pt;
     font-weight: 700;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
   }
-  .recipe-paper-brand {
-    border-bottom: 1px solid var(--rule);
-    padding-bottom: 0.75rem;
+  .recipe-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3mm 7mm;
+    margin: 0;
   }
-  .recipe-paper-footer {
-    justify-content: flex-start;
-    border-top: 1px solid var(--rule);
-    margin-top: 2rem;
-    padding-top: 0.75rem;
+  .recipe-facts dt {
+    color: var(--muted-ink);
+    font-size: 7pt;
+  }
+  .recipe-facts dd {
+    margin: 0;
+    font-size: 9pt;
+    font-weight: 650;
+  }
+  .recipe-cover {
+    width: 100%;
+    max-height: 48mm;
+    object-fit: cover;
+  }
+  .recipe-gallery {
+    display: flex;
+    gap: 3mm;
+  }
+  .recipe-gallery img {
+    width: 28%;
+    max-height: 25mm;
+    object-fit: cover;
+  }
+  .recipe-main-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+    align-items: start;
+    gap: 6mm;
+  }
+  .recipe-section {
+    min-width: 0;
+  }
+  .recipe-section h2,
+  .recipe-callout h2 {
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 2mm;
+    padding-bottom: 1.5mm;
+    font-size: 10pt;
+    font-weight: 680;
+  }
+  .recipe-section h3,
+  .recipe-step-content h3 {
+    margin-top: 2mm;
+    font-size: 8.5pt;
+  }
+  .recipe-ingredient-group ul,
+  .recipe-method ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .recipe-ingredient-group li {
+    display: flex;
+    justify-content: space-between;
+    gap: 3mm;
+    border-bottom: 0.2mm solid var(--rule);
+    padding: 1mm 0;
+    font-size: 8pt;
+  }
+  .recipe-amount {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .recipe-method ol {
+    display: grid;
+    gap: 2.5mm;
+  }
+  .recipe-method li {
+    display: grid;
+    grid-template-columns: 8mm minmax(0, 1fr);
+    gap: 2mm;
+    break-inside: avoid;
+  }
+  .recipe-step-number {
+    color: var(--recipe-accent);
+    font-size: 8pt;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .recipe-step-content {
+    font-size: 8pt;
+  }
+  .recipe-step-content small {
+    display: block;
+    color: var(--muted-ink);
+  }
+  .recipe-callout,
+  .recipe-nutrition,
+  .recipe-notes {
+    font-size: 8pt;
+  }
+  .recipe-nutrition > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2mm 5mm;
+  }
+  .recipe-overflow-warning {
+    max-width: 100%;
+  }
+  .recipe-paper[data-orientation='landscape'] .recipe-front-composition {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  }
+  .recipe-paper.recipe-format-long-note .recipe-front-composition {
+    grid-template-columns: 1fr;
+  }
+  .recipe-paper.recipe-format-long-note .recipe-cover {
+    max-height: 90mm;
+  }
+  .recipe-paper.recipe-format-book-spread {
+    width: 420mm;
+    height: 297mm;
+  }
+  .recipe-style-monochrome .recipe-page-content {
+    border-left: 1mm solid var(--ink);
+    padding-left: 5mm;
+  }
+  .recipe-style-monochrome .recipe-main-columns {
+    grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  }
+  .recipe-style-editorial .recipe-page-content {
+    gap: 7mm;
+  }
+  .recipe-style-editorial .recipe-front-composition {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .recipe-style-editorial .recipe-cover {
+    max-height: 70mm;
+    aspect-ratio: 1.65;
+  }
+  .recipe-style-editorial .recipe-intro h1 {
+    font-family: Georgia, serif;
+    font-size: clamp(26pt, 5vw, 42pt);
+  }
+  .recipe-style-restaurant .recipe-front-composition {
+    display: flex;
+    flex-direction: column-reverse;
+    text-align: center;
+  }
+  .recipe-style-restaurant .recipe-cover {
+    max-height: 100mm;
+    aspect-ratio: 1.12;
+  }
+  .recipe-style-restaurant .recipe-intro h1 {
+    margin-inline: auto;
+    color: #f7f1e7;
+    font-family: Georgia, serif;
+    font-weight: 500;
+  }
+  .recipe-style-vintage {
+    border: 2mm double #9e825e;
+    padding: 9mm;
+  }
+  .recipe-style-vintage .recipe-page-content {
+    border: 0.35mm solid #b9a17e;
+    padding: 5mm;
+  }
+  .recipe-style-vintage .recipe-front-composition {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+  }
+  .recipe-style-japanese .recipe-front-composition {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr);
+    align-items: end;
+  }
+  .recipe-style-japanese .recipe-intro {
+    grid-column: 2;
+    grid-row: 1;
+    writing-mode: vertical-rl;
+    justify-self: end;
+  }
+  .recipe-style-japanese .recipe-cover {
+    grid-column: 1;
+    grid-row: 1;
+    aspect-ratio: 0.92;
+  }
+  .recipe-style-japanese .recipe-main-columns {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  }
+  .recipe-style-chef-sheet .recipe-page-content {
+    gap: 3mm;
+  }
+  .recipe-style-chef-sheet .recipe-main-columns {
+    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  }
+  .recipe-style-chef-sheet .recipe-ingredient-group li {
+    padding-block: 0.4mm;
+    font-family: 'Arial Narrow', Arial, sans-serif;
+  }
+  .recipe-style-chef-sheet .recipe-section h2 {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 2mm;
+  }
+  .recipe-style-chef-sheet .recipe-step-number {
+    border: 0.3mm solid var(--recipe-accent);
+    border-radius: 50%;
+    text-align: center;
+  }
+  .recipe-duplex-side .recipe-page-content {
+    min-height: 0;
+  }
+  .recipe-side-front .recipe-page-content {
+    justify-content: center;
+  }
+  .recipe-side-back .recipe-main-columns {
+    margin-top: 4mm;
+  }
+  .recipe-format-story .recipe-page-content,
+  .recipe-format-note .recipe-page-content,
+  .recipe-format-square .recipe-page-content,
+  .recipe-format-mini-card .recipe-page-content {
+    gap: 3mm;
+  }
+  .recipe-format-story .recipe-front-composition,
+  .recipe-format-note .recipe-front-composition,
+  .recipe-format-square .recipe-front-composition,
+  .recipe-format-mini-card .recipe-front-composition {
+    grid-template-columns: 1fr;
+  }
+  .recipe-format-story .recipe-main-columns,
+  .recipe-format-note .recipe-main-columns,
+  .recipe-format-square .recipe-main-columns,
+  .recipe-format-mini-card .recipe-main-columns {
+    grid-template-columns: 1fr;
+  }
+  .recipe-preview-frame {
+    position: relative;
+    flex: none;
+  }
+  .recipe-preview-frame > .recipe-paper {
+    position: absolute;
+    inset: 0 auto auto 0;
+    margin: 0;
+    transform: scale(var(--preview-scale, 1));
+    transform-origin: top left;
+  }
+  .recipe-preview-pages {
+    display: flex;
+    width: max-content;
+    max-width: 100%;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 12px;
+    margin-inline: auto;
+  }
+  .recipe-preview-duplex {
+    display: grid;
+    grid-template-columns: repeat(2, max-content);
+    gap: 16px;
+  }
+  .recipe-paper.recipe-format-long-note .recipe-page-content {
+    height: auto;
+    min-height: 178mm;
   }
   .recipe-content {
     display: flex;
@@ -472,22 +762,10 @@
     --paper: #f6f1e8;
     --ink: #29271f;
     --muted-ink: #70695d;
-    padding: clamp(1.5rem, 6vw, 3.2rem);
   }
   .recipe-style-editorial h1 {
     font-weight: 500;
     letter-spacing: -0.035em;
-  }
-  .recipe-style-editorial .recipe-cover {
-    max-height: 28rem;
-    aspect-ratio: 1.45;
-  }
-  .recipe-style-editorial .recipe-main-columns {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .recipe-style-editorial .recipe-ingredient-group ul {
-    columns: 2;
-    column-gap: 1.5rem;
   }
   .recipe-style-restaurant {
     --paper: #252421;
@@ -496,9 +774,6 @@
     --rule: rgb(245 240 230 / 24%);
     background: #252421;
     border-color: #514b3d;
-  }
-  .recipe-style-restaurant .recipe-paper-brand {
-    color: #d7c59c;
   }
   .recipe-style-restaurant .recipe-intro {
     text-align: center;
@@ -513,10 +788,6 @@
   .recipe-style-restaurant .recipe-kicker {
     letter-spacing: 0.22em;
   }
-  .recipe-style-restaurant .recipe-cover {
-    max-height: 25rem;
-    aspect-ratio: 1.2;
-  }
   .recipe-style-restaurant .recipe-facts {
     text-align: center;
   }
@@ -528,11 +799,8 @@
     --ink: #45382c;
     --muted-ink: #786653;
     --rule: #b9a17e;
-    border: 5px double #9e825e;
-    padding: clamp(1rem, 4.5vw, 2.25rem);
-  }
-  .recipe-style-vintage .recipe-paper-brand {
-    border-bottom-style: double;
+    border: 2mm double #9e825e;
+    padding: 9mm;
   }
   .recipe-style-vintage .recipe-intro {
     text-align: center;
@@ -551,41 +819,6 @@
     --ink: #252522;
     --muted-ink: #77756f;
   }
-  .recipe-style-japanese .recipe-content {
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-    align-items: start;
-    gap: 1.35rem 1.8rem;
-  }
-  .recipe-style-japanese .recipe-paper-brand,
-  .recipe-style-japanese .recipe-paper-footer,
-  .recipe-style-japanese .recipe-facts,
-  .recipe-style-japanese .recipe-gallery,
-  .recipe-style-japanese .recipe-callout,
-  .recipe-style-japanese .recipe-notes,
-  .recipe-style-japanese .recipe-nutrition {
-    grid-column: 1 / -1;
-  }
-  .recipe-style-japanese .recipe-cover {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    align-self: center;
-    aspect-ratio: 0.85;
-  }
-  .recipe-style-japanese .recipe-intro {
-    grid-column: 1;
-    grid-row: 1;
-    padding-top: 1rem;
-  }
-  .recipe-style-japanese .recipe-main-columns {
-    display: contents;
-  }
-  .recipe-style-japanese .recipe-ingredients {
-    grid-column: 1;
-  }
-  .recipe-style-japanese .recipe-method {
-    grid-column: 2;
-  }
   .recipe-style-japanese .recipe-intro h1 {
     font-size: clamp(1.8rem, 4vw, 2.8rem);
     font-weight: 500;
@@ -596,89 +829,16 @@
     --muted-ink: #657068;
     border-top: 8px solid var(--recipe-accent);
   }
-  .recipe-style-chef-sheet .recipe-content {
-    gap: 1rem;
-  }
   .recipe-style-chef-sheet .recipe-intro h1 {
     font-size: clamp(1.65rem, 4vw, 2.7rem);
-  }
-  .recipe-style-chef-sheet .recipe-main-columns {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 1rem;
-  }
-  .recipe-style-chef-sheet .recipe-cover {
-    max-height: 13rem;
-    aspect-ratio: 2.2;
   }
   .recipe-style-chef-sheet .recipe-ingredient-group li {
     padding-block: 0.22rem;
     font-size: 0.78em;
   }
-  .recipe-style-chef-sheet .recipe-method ol {
-    gap: 0.65rem;
-  }
-  .recipe-book-spread {
-    aspect-ratio: auto !important;
-    min-height: 34rem;
-  }
-  .recipe-spread-pages {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-    padding-top: 1.35rem;
-  }
-  .recipe-spread-left,
-  .recipe-spread-right {
-    min-width: 0;
-    padding: 0 1.2rem;
-  }
-  .recipe-spread-left {
-    padding-left: 0;
-  }
-  .recipe-spread-right {
-    border-left: 1px solid var(--rule);
-    padding-right: 0;
-  }
-  .recipe-spread-left > *,
-  .recipe-spread-right > * {
-    margin-bottom: 1.4rem;
-  }
-  .recipe-spread-left .recipe-cover {
-    margin-bottom: 1rem;
-  }
-  .recipe-overflow {
-    min-height: max(32rem, 100%);
-  }
   @media (max-width: 639px) {
-    .recipe-main-columns,
-    .recipe-style-chef-sheet .recipe-main-columns {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .recipe-style-japanese .recipe-content {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .recipe-style-japanese .recipe-cover,
-    .recipe-style-japanese .recipe-intro,
-    .recipe-style-japanese .recipe-ingredients,
-    .recipe-style-japanese .recipe-method {
-      grid-column: 1;
-      grid-row: auto;
-    }
-    .recipe-spread-pages {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .recipe-spread-left,
-    .recipe-spread-right {
-      padding: 0;
-    }
-    .recipe-spread-right {
-      border-top: 1px solid var(--rule);
-      border-left: 0;
-      margin-top: 0.5rem;
-      padding-top: 1.5rem;
-    }
-    .recipe-paper.recipe-format-book-spread {
-      aspect-ratio: auto;
+    .recipe-preview-duplex {
+      display: block;
     }
   }
   .type-display {

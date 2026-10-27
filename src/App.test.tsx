@@ -151,9 +151,7 @@ describe('Recipe workspace', () => {
       () => expect(screen.getByRole('status')).toHaveTextContent('Сохранено'),
       { timeout: 3000 },
     )
-    expect(
-      screen.getByRole('button', { name: 'Экспортировать' }),
-    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Экспорт' })).toBeDisabled()
   })
 
   it('supports library search and keeps mobile navigation accessible', async () => {

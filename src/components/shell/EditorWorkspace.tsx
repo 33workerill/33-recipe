@@ -4,6 +4,7 @@ import {
   FileText,
   ListOrdered,
   NotebookPen,
+  Palette,
   Plus,
   Scale,
   X,
@@ -23,6 +24,8 @@ import { NumericField } from '@/components/shell/NumericField'
 import { StepEditor } from '@/components/shell/StepEditor'
 import { ImageManager } from '@/components/shell/ImageManager'
 import type { SaveStatus } from '@/features/recipes/data/use-recipe-workspace'
+import { PresentationSettings } from '@/components/shell/PresentationSettings'
+import type { RecipePresentation } from '@/features/recipes/presentation'
 import {
   validateCompleteRecipe,
   validateDraftRecipe,
@@ -47,6 +50,8 @@ type Props = {
   onRemoveStep: (id: string) => Promise<void>
   onAltChange: (id: string, value: string) => void
   onReorderImage: (id: string, offset: -1 | 1) => void
+  presentation: RecipePresentation
+  onPresentationChange: (next: RecipePresentation) => void
 }
 
 function EditorSection({
@@ -347,6 +352,8 @@ export function EditorWorkspace({
   onRemoveStep,
   onAltChange,
   onReorderImage,
+  presentation,
+  onPresentationChange,
 }: Props) {
   const complete = recipe ? validateCompleteRecipe(recipe) : null
   const draft = recipe ? validateDraftRecipe(recipe) : null
@@ -568,6 +575,18 @@ export function EditorWorkspace({
               icon={<NotebookPen aria-hidden="true" className="size-5" />}
             >
               <ExtraFields recipe={recipe} onChange={onChange} />
+            </EditorSection>
+            <EditorSection
+              value="presentation"
+              number="06 / ОФОРМЛЕНИЕ"
+              title="Оформление"
+              description="Стиль, формат страницы, пресеты и видимость разделов"
+              icon={<Palette aria-hidden="true" className="size-5" />}
+            >
+              <PresentationSettings
+                presentation={presentation}
+                onChange={onPresentationChange}
+              />
             </EditorSection>
           </Accordion>
         </>

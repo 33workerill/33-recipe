@@ -12,6 +12,8 @@ export type RecipeStyleId = (typeof RECIPE_STYLES)[number]
 export const RECIPE_FORMATS = [
   'a4',
   'a5',
+  'a4-duplex',
+  'a5-duplex',
   'story',
   'note',
   'long-note',
@@ -73,6 +75,8 @@ export const STYLE_LABELS: Record<RecipeStyleId, string> = {
 export const FORMAT_LABELS: Record<RecipeFormatId, string> = {
   a4: 'A4 · 210 × 297 мм',
   a5: 'A5 · 148 × 210 мм',
+  'a4-duplex': 'A4 Duplex · 2 стороны',
+  'a5-duplex': 'A5 Duplex · 2 стороны',
   story: 'Story · 9:16',
   note: 'Note · 4:5',
   'long-note': 'Long Note · адаптивная высота',
