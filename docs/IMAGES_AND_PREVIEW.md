@@ -10,9 +10,9 @@ The recipe metadata and image Blob are written in the same IndexedDB transaction
 
 ## Preview
 
-`PreviewPanel` renders the current React recipe state, not a second read from IndexedDB. It uses a neutral paper surface and a first, independent template called **33 Monochrome**. The template shows available recipe fields, omits empty optional sections, and grows with the recipe content. Missing Blob records omit the image or show an unavailable-file placeholder in the editor.
+`PreviewPanel` renders the current React recipe state. Physical layout is measured after fonts and images load; the shared DOM paginator places complete content, splits oversized text without loss, and checks every page before displaying it. All formats except Long Note have fixed boundaries. Screen zoom changes only the display. Six visual styles and Duplex sides share the same pagination engine. See `STYLES_AND_LAYOUTS.md` for the browser regression matrix.
 
-The preview is intentionally separate from future layouts, themes and export modules. Changing the application's light/dark theme does not recolor the recipe page.
+Presentation settings and presets are stored separately from Recipe Data. The editor owns the shared settings in section 06 and updates the preview immediately. Changing the application's light/dark theme does not recolor the recipe page. Preview geometry is not a promise of file export, printer registration/duplex flip, or A4-to-A5 book imposition; those remain Phase 08.
 
 ## Backup and restore
 

@@ -1,85 +1,55 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { PreviewPanel } from '@/components/shell/PreviewPanel'
-import { pizzaRecipe } from '@/features/recipes/model/__fixtures__/recipes'
+import { RecipeRenderer } from '@/features/recipes/presentation/RecipeRenderer'
+import { EditorWorkspace } from '@/components/shell/EditorWorkspace'
+import { createDemoRecipe } from '@/features/recipes/data/development-recipe'
+import { DEFAULT_PRESENTATION } from '@/features/recipes/presentation'
 
-describe('live recipe preview', () => {
-  it('renders current recipe content and omits optional sections when empty', () => {
-    const live = {
-      ...pizzaRecipe,
-      title: 'Актуальное название',
-      tips: '',
-      notes: '',
-      nutrition: { basis: 'per_serving' as const },
-    }
-    render(<PreviewPanel recipe={live} imageUrls={{}} />)
-    expect(screen.getByText('Актуальное название')).toBeInTheDocument()
-    expect(screen.getByText('Ингредиенты')).toBeInTheDocument()
-    expect(screen.queryByText('Совет')).not.toBeInTheDocument()
-    expect(screen.queryByText('Пищевая ценность')).not.toBeInTheDocument()
-  })
-
-  it('shows the empty state without a selected recipe and has no forced page height', () => {
-    const { container } = render(<PreviewPanel recipe={null} imageUrls={{}} />)
-    expect(screen.getByText('Выберите или создайте рецепт')).toBeInTheDocument()
-    expect(container.querySelector('[class*="aspect-"]')).toBeNull()
-  })
-
-  it('renders an available cover from a local object URL', () => {
-    const cover = pizzaRecipe.assets[0]
+describe('recipe source and presentation settings', () => {
+  it('provides semantic measurable blocks for all content on physical paper without service branding', () => {
     const { container } = render(
-      <PreviewPanel
-        recipe={pizzaRecipe}
-        imageUrls={{ [cover.id]: 'blob:cover' }}
+      <RecipeRenderer
+        recipe={createDemoRecipe()}
+        imageUrls={{}}
+        presentation={{ ...DEFAULT_PRESENTATION, formatId: 'a4' }}
       />,
     )
-    expect(container.querySelector(`img[src="blob:cover"]`)).toBeInTheDocument()
-  })
-
-  it('renders gallery images that are present in local storage', () => {
-    const gallery = {
-      ...pizzaRecipe.assets[0],
-      id: '00000000-0000-4000-8000-000000000998',
-      role: 'gallery' as const,
-      filename: 'gallery.jpg',
-    }
-    const { container } = render(
-      <PreviewPanel
-        recipe={{ ...pizzaRecipe, assets: [...pizzaRecipe.assets, gallery] }}
-        imageUrls={{ [gallery.id]: 'blob:gallery' }}
-      />,
-    )
+    const page = container.querySelector('.recipe-paper')!
+    expect(page.getAttribute('style')).toContain('--page-width: 210mm')
+    expect(page.getAttribute('style')).toContain('--page-height: 297mm')
+    expect(page).not.toHaveTextContent('33 RECIPE')
     expect(
-      container.querySelector('img[src="blob:gallery"]'),
-    ).toBeInTheDocument()
+      page.querySelectorAll('[data-layout-unit="ingredients"]'),
+    ).toHaveLength(9)
+    expect(page.querySelectorAll('[data-layout-unit="method"]')).toHaveLength(6)
+    expect(page).toHaveTextContent('Пищевая ценность')
+    expect(page).toHaveTextContent('Совет')
+    expect(page).toHaveTextContent('Заметки')
   })
-
-  it('renders changed ingredient and step order from the latest recipe', () => {
-    const { container, rerender } = render(
-      <PreviewPanel recipe={pizzaRecipe} imageUrls={{}} />,
+  it('places presentation controls in editor section 06', () => {
+    const changes: string[] = []
+    render(
+      <EditorWorkspace
+        recipe={createDemoRecipe()}
+        status="saved"
+        error={null}
+        onChange={() => undefined}
+        onSave={() => undefined}
+        onCreate={() => undefined}
+        imageUrls={{}}
+        onAddImage={async () => undefined}
+        onRemoveImage={async () => undefined}
+        onRemoveStep={async () => undefined}
+        onAltChange={() => undefined}
+        onReorderImage={() => undefined}
+        presentation={DEFAULT_PRESENTATION}
+        onPresentationChange={(next) => changes.push(next.formatId)}
+      />,
     )
-    const updated = {
-      ...pizzaRecipe,
-      ingredientGroups: pizzaRecipe.ingredientGroups.map((group, index) =>
-        index === 0
-          ? {
-              ...group,
-              ingredients: [
-                ...group.ingredients,
-                {
-                  ...group.ingredients[0],
-                  id: '00000000-0000-4000-8000-000000000999',
-                  name: 'Новый ингредиент',
-                },
-              ],
-            }
-          : group,
-      ),
-      steps: [...pizzaRecipe.steps].reverse(),
-    }
-    rerender(<PreviewPanel recipe={updated} imageUrls={{}} />)
-    expect(screen.getByText('Новый ингредиент')).toBeInTheDocument()
-    const steps = container.querySelectorAll('ol > li')
-    expect(steps[0]).toHaveTextContent(pizzaRecipe.steps.at(-1)!.instruction)
+    fireEvent.click(screen.getByText('Оформление'))
+    fireEvent.change(screen.getByLabelText('Формат'), {
+      target: { value: 'a4-duplex' },
+    })
+    expect(changes).toEqual(['a4-duplex'])
   })
 })

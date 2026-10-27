@@ -1,354 +1,316 @@
-import { Expand, FileDown, ScanLine, ZoomIn } from 'lucide-react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { ChevronLeft, ChevronRight, FileDown } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
+import { RecipeRenderer } from '@/features/recipes/presentation/RecipeRenderer'
+import {
+  getPageGeometry,
+  isDuplexFormat,
+  type RecipePresentation,
+} from '@/features/recipes/presentation'
 import type { Recipe } from '@/features/recipes/model'
+import { usePagination } from '@/features/recipes/presentation/use-pagination'
 
-const units: Record<string, string> = {
-  g: 'г',
-  kg: 'кг',
-  ml: 'мл',
-  l: 'л',
-  pcs: 'шт.',
-  tsp: 'ч. л.',
-  tbsp: 'ст. л.',
-  pinch: 'щепотка',
-  to_taste: 'по вкусу',
-}
-const difficulties = { easy: 'Легко', medium: 'Средне', hard: 'Сложно' }
+type ZoomMode = 'fit' | 'width' | 'manual' | '100'
+type DuplexView = 'front' | 'back' | 'both'
+const pxPerMm = 96 / 25.4
 
 export function PreviewPanel({
   recipe,
   imageUrls,
+  presentation,
 }: {
   recipe: Recipe | null
   imageUrls: Record<string, string>
+  presentation: RecipePresentation
 }) {
-  const cover = recipe?.assets.find((asset) => asset.role === 'cover')
-  const gallery = recipe?.assets.filter(
-    (asset) => asset.role === 'gallery' && imageUrls[asset.id],
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [viewport, setViewport] = useState({ width: 0, height: 0 })
+  const [zoomMode, setZoomMode] = useState<ZoomMode>('fit')
+  const [manualZoom, setManualZoom] = useState(100)
+  const [duplexView, setDuplexView] = useState<DuplexView>('front')
+  const [pageIndex, setPageIndex] = useState(0)
+  const {
+    sourceRef,
+    measurementRef,
+    pages: measuredPages,
+    ready,
+    error,
+  } = usePagination(recipe, presentation, imageUrls)
+  const duplex = isDuplexFormat(presentation.formatId)
+  const pages = Math.max(
+    1,
+    duplex ? Math.ceil(measuredPages.length / 2) : measuredPages.length,
   )
-  const hasFacts =
-    !!recipe &&
-    [
-      recipe.servings,
-      recipe.preparationTimeMinutes,
-      recipe.cookingTimeMinutes,
-      recipe.difficulty,
-    ].some((value) => value !== undefined)
+  const geometry = getPageGeometry(
+    presentation.formatId,
+    presentation.orientation,
+  )
+  const pageWidth = geometry.widthMm * pxPerMm
+  const pageHeight = geometry.adaptive
+    ? (measuredPages[0]?.heightPx ?? 900)
+    : geometry.heightMm * pxPerMm
+  const isWideScreen = typeof window === 'undefined' || window.innerWidth >= 640
+  const activePageIndex = Math.min(pageIndex, pages - 1)
+  const visibleSides: Array<'front' | 'back'> =
+    duplex && duplexView === 'both' && isWideScreen
+      ? ['front', 'back']
+      : [duplexView === 'back' ? 'back' : 'front']
+
+  useEffect(() => {
+    const node = viewportRef.current
+    if (!node || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(([entry]) => {
+      setViewport({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      })
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  const fitScale = Math.min(
+    Math.max(
+      0.15,
+      (viewport.width - 32) /
+        (pageWidth * (visibleSides.length === 2 ? 2.08 : 1)),
+    ),
+    geometry.adaptive
+      ? 0.8
+      : Math.max(0.15, (viewport.height - 32) / pageHeight),
+    1,
+  )
+  const scale =
+    zoomMode === '100'
+      ? 1
+      : zoomMode === 'manual'
+        ? manualZoom / 100
+        : zoomMode === 'width'
+          ? Math.min(
+              1,
+              (viewport.width - 24) / (pageWidth * visibleSides.length),
+            )
+          : fitScale
+
   return (
     <aside
       aria-label="Предпросмотр рецепта"
-      className="flex min-h-full min-w-0 flex-col border-l border-border bg-muted/40"
+      aria-busy={Boolean(recipe && !ready)}
+      className="flex h-[calc(100svh-8rem)] min-h-[420px] min-w-0 flex-col bg-muted/40 xl:sticky xl:top-0 xl:h-svh"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-6 sm:px-8">
-        <div>
-          <p className="type-caption uppercase tracking-[0.15em] text-muted-foreground">
-            Визуализация
-          </p>
-          <h2 className="mt-2 text-xl font-semibold tracking-[-0.04em]">
-            Предпросмотр
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Шаблон 33 Monochrome
-          </p>
-        </div>
-        <div
-          className="flex gap-1"
-          aria-label="Будущие настройки предпросмотра"
-        >
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            disabled
-            aria-label="Размер страницы пока недоступен"
-            title="Размер страницы пока недоступен"
-          >
-            <Expand aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            disabled
-            aria-label="Масштаб пока недоступен"
-            title="Масштаб пока недоступен"
-          >
-            <ZoomIn aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex flex-1 flex-col items-center px-5 py-6 sm:px-8 xl:sticky xl:top-0">
-        <div className="mb-4 w-full max-w-[520px]">
-          <Button type="button" variant="primary" disabled className="w-full">
-            <FileDown aria-hidden="true" />
-            Экспортировать
-          </Button>
-          <p className="mt-2 text-center text-xs leading-5 text-muted-foreground">
-            Экспорт станет доступен в будущих этапах.
-          </p>
-        </div>
-        <article
-          aria-label="Макет 33 Monochrome"
-          className="shell-preview-paper w-full max-w-[520px] rounded-sm border p-6 text-[#191919] shadow-xl sm:p-10"
-        >
-          <div className="flex items-center justify-between border-b border-black/15 pb-4 text-[10px] font-semibold tracking-[0.2em]">
-            <span>33 RECIPE</span>
-            <span>33 MONOCHROME</span>
+      <header className="border-b border-border px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="type-caption uppercase tracking-[0.15em] text-muted-foreground">
+              Предпросмотр листа
+            </p>
+            <h2 className="mt-1 text-lg font-semibold">
+              {recipe?.title || 'Лист рецепта'}
+            </h2>
           </div>
-          {!recipe ? (
-            <div className="flex min-h-80 flex-col items-center justify-center text-center">
-              <ScanLine aria-hidden="true" className="size-8 opacity-45" />
-              <p className="mt-5 text-lg font-semibold">
-                Выберите или создайте рецепт
-              </p>
-              <p className="mt-2 max-w-xs text-xs leading-5 opacity-65">
-                Текущая версия рецепта будет отображаться здесь.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-8 pt-7">
-              {cover && imageUrls[cover.id] && (
-                <img
-                  src={imageUrls[cover.id]}
-                  alt={cover.altText || recipe.title || 'Обложка рецепта'}
-                  className="max-h-80 w-full object-cover"
-                />
-              )}
-              <header>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-55">
-                  {recipe.category || 'Рецепт'}
-                </p>
-                <h3 className="mt-3 break-words text-3xl font-semibold leading-tight tracking-[-0.05em] sm:text-4xl">
-                  {recipe.title || 'Без названия'}
-                </h3>
-                {recipe.description && (
-                  <p className="mt-4 max-w-prose text-sm leading-6 opacity-75">
-                    {recipe.description}
-                  </p>
-                )}
-              </header>
-              {!!gallery?.length && (
-                <div className="grid grid-cols-2 gap-2">
-                  {gallery.map((asset) => (
-                    <img
-                      key={asset.id}
-                      src={imageUrls[asset.id]}
-                      alt={asset.altText || 'Фотография рецепта'}
-                      className="max-h-56 w-full object-cover"
-                    />
-                  ))}
-                </div>
-              )}
-              {hasFacts && (
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-black/15 py-4 text-xs sm:grid-cols-4">
-                  {recipe.servings !== undefined && (
-                    <div>
-                      <dt className="uppercase tracking-wider opacity-50">
-                        Порции
-                      </dt>
-                      <dd className="mt-1 font-medium">{recipe.servings}</dd>
-                    </div>
-                  )}
-                  {recipe.preparationTimeMinutes !== undefined && (
-                    <div>
-                      <dt className="uppercase tracking-wider opacity-50">
-                        Подготовка
-                      </dt>
-                      <dd className="mt-1 font-medium">
-                        {recipe.preparationTimeMinutes} мин
-                      </dd>
-                    </div>
-                  )}
-                  {recipe.cookingTimeMinutes !== undefined && (
-                    <div>
-                      <dt className="uppercase tracking-wider opacity-50">
-                        Готовка
-                      </dt>
-                      <dd className="mt-1 font-medium">
-                        {recipe.cookingTimeMinutes} мин
-                      </dd>
-                    </div>
-                  )}
-                  {recipe.difficulty && (
-                    <div>
-                      <dt className="uppercase tracking-wider opacity-50">
-                        Сложность
-                      </dt>
-                      <dd className="mt-1 font-medium">
-                        {difficulties[recipe.difficulty]}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              )}
-              {recipe.ingredientGroups.some((group) =>
-                group.ingredients.some((item) => item.name.trim()),
-              ) && (
-                <section>
-                  <h4 className="border-b border-black/15 pb-2 text-sm font-semibold tracking-tight">
-                    Ингредиенты
-                  </h4>
-                  <div className="space-y-5 pt-4">
-                    {recipe.ingredientGroups.map((group) => {
-                      const items = group.ingredients.filter((item) =>
-                        item.name.trim(),
-                      )
-                      return items.length ? (
-                        <div key={group.id}>
-                          {group.title && (
-                            <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider opacity-55">
-                              {group.title}
-                            </h5>
-                          )}
-                          <ul className="space-y-2">
-                            {items.map((item) => (
-                              <li
-                                key={item.id}
-                                className="flex justify-between gap-4 border-b border-black/10 pb-2 text-sm"
-                              >
-                                <span>
-                                  {item.name}
-                                  {item.note && (
-                                    <span className="ml-1 text-xs opacity-60">
-                                      {item.note}
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="shrink-0 text-right tabular-nums">
-                                  {item.amount !== undefined &&
-                                    `${new Intl.NumberFormat('ru-RU').format(item.amount)} `}
-                                  {item.unit.kind === 'custom'
-                                    ? item.unit.label
-                                    : units[item.unit.code]}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null
-                    })}
-                  </div>
-                </section>
-              )}
-              {recipe.steps.some(
-                (step) => step.instruction.trim() || step.title?.trim(),
-              ) && (
-                <section>
-                  <h4 className="border-b border-black/15 pb-2 text-sm font-semibold tracking-tight">
-                    Приготовление
-                  </h4>
-                  <ol className="space-y-6 pt-4">
-                    {recipe.steps.map((step, index) =>
-                      step.instruction.trim() || step.title?.trim() ? (
-                        <li
-                          key={step.id}
-                          className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3"
-                        >
-                          <span className="pt-0.5 text-xs font-semibold tabular-nums opacity-45">
-                            {String(index + 1).padStart(2, '0')}
-                          </span>
-                          <div>
-                            {step.title && (
-                              <h5 className="mb-1 text-sm font-semibold">
-                                {step.title}
-                              </h5>
-                            )}
-                            <p className="whitespace-pre-wrap text-sm leading-6">
-                              {step.instruction}
-                            </p>
-                            {(step.durationMinutes !== undefined ||
-                              step.temperatureCelsius !== undefined) && (
-                              <p className="mt-2 text-xs opacity-55">
-                                {[
-                                  step.durationMinutes !== undefined &&
-                                    `${step.durationMinutes} мин`,
-                                  step.temperatureCelsius !== undefined &&
-                                    `${step.temperatureCelsius} °C`,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' · ')}
-                              </p>
-                            )}
-                            {step.note && (
-                              <p className="mt-2 text-xs italic opacity-65">
-                                {step.note}
-                              </p>
-                            )}
-                            {step.assetIds?.map((id) => {
-                              const asset = recipe.assets.find(
-                                (item) => item.id === id,
-                              )
-                              return (
-                                imageUrls[id] && (
-                                  <img
-                                    key={id}
-                                    src={imageUrls[id]}
-                                    alt={asset?.altText || `Шаг ${index + 1}`}
-                                    className="mt-3 max-h-64 w-full object-cover"
-                                  />
-                                )
-                              )
-                            })}
-                          </div>
-                        </li>
-                      ) : null,
-                    )}
-                  </ol>
-                </section>
-              )}
-              {recipe.tips.trim() && (
-                <section className="border-l-2 border-black pl-4">
-                  <h4 className="text-sm font-semibold">Совет</h4>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
-                    {recipe.tips}
-                  </p>
-                </section>
-              )}
-              {recipe.nutrition &&
-                Object.entries(recipe.nutrition).some(
-                  ([key, value]) => key !== 'basis' && value !== undefined,
-                ) && (
-                  <section>
-                    <h4 className="border-b border-black/15 pb-2 text-sm font-semibold">
-                      Пищевая ценность
-                    </h4>
-                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                      {[
-                        ['calories', 'ккал'],
-                        ['protein', 'белки'],
-                        ['fat', 'жиры'],
-                        ['carbohydrates', 'углеводы'],
-                      ].map(([key, label]) => {
-                        const value =
-                          recipe.nutrition?.[
-                            key as
-                              'calories' | 'protein' | 'fat' | 'carbohydrates'
-                          ]
-                        return value === undefined ? null : (
-                          <span key={key}>
-                            <strong>
-                              {new Intl.NumberFormat('ru-RU').format(value)}
-                            </strong>{' '}
-                            {label}
-                          </span>
-                        )
-                      })}
-                    </div>
-                  </section>
-                )}
-              {recipe.notes.trim() && (
-                <p className="border-t border-black/15 pt-4 text-xs leading-5 opacity-65">
-                  {recipe.notes}
-                </p>
-              )}
-              <footer className="border-t border-black/15 pt-4 text-[9px] tracking-[0.16em] opacity-45">
-                33 RECIPE · MONOCHROME
-              </footer>
+          <Button
+            type="button"
+            variant="outline"
+            disabled
+            title="Экспорт появится в Phase 08"
+          >
+            <FileDown aria-hidden="true" />
+            Экспорт
+          </Button>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-1"
+            role="group"
+            aria-label="Масштаб страницы"
+          >
+            <Button
+              size="sm"
+              variant={zoomMode === 'fit' ? 'secondary' : 'ghost'}
+              onClick={() => setZoomMode('fit')}
+            >
+              Вместить
+            </Button>
+            <Button
+              size="sm"
+              variant={zoomMode === 'width' ? 'secondary' : 'ghost'}
+              onClick={() => setZoomMode('width')}
+            >
+              По ширине
+            </Button>
+            <Button
+              size="sm"
+              variant={zoomMode === '100' ? 'secondary' : 'ghost'}
+              onClick={() => setZoomMode('100')}
+            >
+              100%
+            </Button>
+            <label className="sr-only" htmlFor="preview-manual-zoom">
+              Ручной масштаб
+            </label>
+            <input
+              id="preview-manual-zoom"
+              aria-label="Ручной масштаб"
+              type="range"
+              min="25"
+              max="140"
+              step="5"
+              value={
+                zoomMode === 'manual' ? manualZoom : Math.round(scale * 100)
+              }
+              onChange={(event) => {
+                setManualZoom(Number(event.target.value))
+                setZoomMode('manual')
+              }}
+              className="ml-2 w-20 accent-primary"
+            />
+            <span className="min-w-10 text-xs tabular-nums text-muted-foreground">
+              {Math.round(scale * 100)}%
+            </span>
+          </div>
+          {duplex && (
+            <div
+              role="group"
+              aria-label="Сторона двустороннего листа"
+              className="flex rounded-lg border border-border bg-background p-1"
+            >
+              {(
+                [
+                  ['front', 'Лицевая'],
+                  ['back', 'Оборотная'],
+                  ['both', 'Обе'],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={duplexView === value ? 'secondary' : 'ghost'}
+                  aria-pressed={duplexView === value}
+                  onClick={() => setDuplexView(value)}
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
           )}
-        </article>
+        </div>
+        {pages > 1 && (
+          <nav
+            aria-label="Страницы рецепта"
+            className="mt-3 flex items-center justify-center gap-3"
+          >
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label="Предыдущий лист"
+              disabled={activePageIndex === 0}
+              onClick={() => setPageIndex((value) => Math.max(0, value - 1))}
+            >
+              <ChevronLeft aria-hidden="true" />
+            </Button>
+            <span className="text-sm tabular-nums">
+              Лист {activePageIndex + 1} из {pages}
+            </span>
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label="Следующий лист"
+              disabled={activePageIndex >= pages - 1}
+              onClick={() =>
+                setPageIndex((value) => Math.min(pages - 1, value + 1))
+              }
+            >
+              <ChevronRight aria-hidden="true" />
+            </Button>
+          </nav>
+        )}
+        {error && (
+          <p role="alert" className="mt-2 text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        {pages > 1 && (
+          <p
+            role="status"
+            className="mt-1 text-center text-xs text-muted-foreground"
+          >
+            Содержимое разбито на {pages} листа без удаления текста.
+          </p>
+        )}
+      </header>
+      <div
+        ref={viewportRef}
+        className="recipe-preview-viewport min-h-0 flex-1 overflow-auto p-4 sm:p-6"
+      >
+        <div
+          className={`recipe-preview-pages ${duplex && visibleSides.length === 2 ? 'recipe-preview-duplex' : ''}`}
+        >
+          {(!recipe || ready) &&
+            !error &&
+            visibleSides.map((side) => (
+              <div
+                className="recipe-preview-frame"
+                key={`${side}-${activePageIndex}`}
+                style={
+                  {
+                    width: `${pageWidth * scale}px`,
+                    height: `${pageHeight * scale}px`,
+                    '--preview-scale': scale,
+                  } as CSSProperties
+                }
+              >
+                <RecipeRenderer
+                  recipe={recipe}
+                  imageUrls={imageUrls}
+                  presentation={presentation}
+                  pageIndex={activePageIndex}
+                  side={duplex ? side : 'single'}
+                  pageHtml={
+                    measuredPages[
+                      duplex
+                        ? activePageIndex * 2 + (side === 'back' ? 1 : 0)
+                        : activePageIndex
+                    ]?.html
+                  }
+                />
+              </div>
+            ))}
+        </div>
       </div>
+      {recipe && !ready && !error && (
+        <p className="p-4 text-sm">Компоновка страниц…</p>
+      )}
+      {createPortal(
+        <div className="recipe-measurement" aria-hidden="true" inert>
+          <div ref={sourceRef}>
+            <RecipeRenderer
+              recipe={recipe}
+              imageUrls={imageUrls}
+              presentation={presentation}
+            />
+          </div>
+          <div ref={measurementRef} />
+          <div
+            data-pagination-audit
+            data-layout-status={ready ? 'ready' : 'pending'}
+          >
+            {measuredPages.map((page, index) => (
+              <RecipeRenderer
+                key={index}
+                recipe={recipe}
+                imageUrls={imageUrls}
+                presentation={presentation}
+                pageIndex={page.sheet}
+                side={page.side}
+                pageHtml={page.html}
+              />
+            ))}
+          </div>
+        </div>,
+        document.body,
+      )}
     </aside>
   )
 }

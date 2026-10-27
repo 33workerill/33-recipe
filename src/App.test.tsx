@@ -9,6 +9,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App'
 import { RecipeRepository } from '@/features/recipes/data/repository'
+import { DEMO_RECIPE_ID } from '@/features/recipes/data/development-recipe'
 import { ThemeProvider } from '@/theme/theme-provider'
 
 function renderShell() {
@@ -81,6 +82,44 @@ describe('Recipe workspace', () => {
     expect(screen.getByText('семейный')).toBeInTheDocument()
   })
 
+  it('adds one development demo recipe and reopens it instead of duplicating', async () => {
+    renderShell()
+    const navigation = screen.getByRole('navigation', {
+      name: 'Основная навигация',
+    })
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: 'Мои рецепты' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Добавить тестовый рецепт' }),
+    )
+    expect(
+      await screen.findByRole('textbox', { name: 'Название' }),
+    ).toHaveValue('Пицца Маргарита — ТЕСТ')
+
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: 'Мои рецепты' }),
+    )
+    expect(
+      await screen.findByText('Пицца Маргарита — ТЕСТ'),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Добавить тестовый рецепт' }),
+    )
+    expect(
+      await screen.findByRole('textbox', { name: 'Название' }),
+    ).toHaveValue('Пицца Маргарита — ТЕСТ')
+
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: 'Мои рецепты' }),
+    )
+    await screen.findByRole('heading', { level: 1, name: 'Мои рецепты' })
+    const demoRecords = (await new RecipeRepository().list()).filter(
+      ({ recipe }) => recipe.id === DEMO_RECIPE_ID,
+    )
+    expect(demoRecords).toHaveLength(1)
+  })
+
   it('edits groups, fractional amounts, steps and draft status', async () => {
     renderShell()
     fireEvent.click(
@@ -112,9 +151,7 @@ describe('Recipe workspace', () => {
       () => expect(screen.getByRole('status')).toHaveTextContent('Сохранено'),
       { timeout: 3000 },
     )
-    expect(
-      screen.getByRole('button', { name: 'Экспортировать' }),
-    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Экспорт' })).toBeDisabled()
   })
 
   it('supports library search and keeps mobile navigation accessible', async () => {
