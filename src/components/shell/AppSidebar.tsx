@@ -29,6 +29,7 @@ import { ThemeToggle } from '@/theme/theme-toggle'
 type NavigationProps = {
   active: WorkspaceSection
   onNavigate: (section: WorkspaceSection) => void
+  onCreate: () => void
 }
 
 function SidebarTheme({ collapsed }: { collapsed: boolean }) {
@@ -69,6 +70,7 @@ function SidebarBody({
   active,
   collapsed,
   onNavigate,
+  onCreate,
 }: NavigationProps & { collapsed: boolean }) {
   return (
     <>
@@ -119,9 +121,8 @@ function SidebarBody({
           <Button
             type="button"
             variant="outline"
-            disabled
-            aria-label={collapsed ? 'Новый рецепт — скоро' : undefined}
-            title="Новый рецепт появится в следующих этапах"
+            onClick={onCreate}
+            aria-label={collapsed ? 'Новый рецепт' : undefined}
             className={collapsed ? 'size-11 p-0' : 'w-full justify-start'}
           >
             <Plus aria-hidden="true" />
@@ -129,7 +130,7 @@ function SidebarBody({
           </Button>
           {!collapsed && (
             <p className="mt-2 px-3 text-xs leading-5 text-muted-foreground">
-              Создание и сохранение рецептов появятся позже.
+              Черновик сохранится в этом браузере.
             </p>
           )}
         </div>
@@ -157,6 +158,7 @@ export function AppSidebar({
   collapsed,
   onCollapse,
   onNavigate,
+  onCreate,
 }: NavigationProps & { collapsed: boolean; onCollapse: () => void }) {
   return (
     <aside
@@ -183,12 +185,17 @@ export function AppSidebar({
         active={active}
         collapsed={collapsed}
         onNavigate={onNavigate}
+        onCreate={onCreate}
       />
     </aside>
   )
 }
 
-export function MobileNavigation({ active, onNavigate }: NavigationProps) {
+export function MobileNavigation({
+  active,
+  onNavigate,
+  onCreate,
+}: NavigationProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -235,6 +242,10 @@ export function MobileNavigation({ active, onNavigate }: NavigationProps) {
             collapsed={false}
             onNavigate={(next) => {
               onNavigate(next)
+              setOpen(false)
+            }}
+            onCreate={() => {
+              onCreate()
               setOpen(false)
             }}
           />
