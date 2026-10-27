@@ -37,6 +37,9 @@
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
+  --preview-paper: oklch(0.995 0 0);
+  --preview-paper-foreground: oklch(0.23 0 0);
+  --preview-paper-border: oklch(0.87 0 0);
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -83,6 +86,9 @@
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
+  --preview-paper: oklch(0.995 0 0);
+  --preview-paper-foreground: oklch(0.23 0 0);
+  --preview-paper-border: oklch(0.87 0 0);
 }
 
 @theme inline {
@@ -152,6 +158,11 @@
 }
 
 @layer components {
+  .shell-preview-paper {
+    background: var(--preview-paper);
+    color: var(--preview-paper-foreground);
+    border-color: var(--preview-paper-border);
+  }
   .type-display {
     font-size: clamp(3rem, 7vw, 6.5rem);
     font-weight: 600;
