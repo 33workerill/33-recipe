@@ -163,7 +163,9 @@ function BackupControls({
         <h2 className="text-base font-semibold">Резервная копия</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Рецепты находятся только в этом браузере и устройстве. Очистка данных
-          сайта может их удалить. Скачивайте копию регулярно.
+          сайта может их удалить. JSON-копия содержит текст рецептов и
+          метаданные, но не сами фотографии. Храните исходные изображения
+          отдельно.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

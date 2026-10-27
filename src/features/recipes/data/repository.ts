@@ -5,9 +5,16 @@ import {
 } from '@/features/recipes/model'
 
 const STORE = 'recipes'
+const IMAGE_STORE = 'images'
 
 type RecipeRecord = { id: string; revision: number; json: string }
 export type StoredRecipe = { recipe: Recipe; revision: number }
+export type StoredImage = {
+  id: string
+  recipeId: string
+  blob: Blob
+  fingerprint?: string
+}
 
 export class RecipeConflictError extends Error {
   constructor(
@@ -47,9 +54,15 @@ export class RecipeRepository {
 
   private open(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const request = this.factory.open(this.name, 1)
+      const request = this.factory.open(this.name, 2)
       request.onupgradeneeded = () => {
-        request.result.createObjectStore(STORE, { keyPath: 'id' })
+        const db = request.result
+        if (!db.objectStoreNames.contains(STORE))
+          db.createObjectStore(STORE, { keyPath: 'id' })
+        if (!db.objectStoreNames.contains(IMAGE_STORE)) {
+          const images = db.createObjectStore(IMAGE_STORE, { keyPath: 'id' })
+          images.createIndex('recipeId', 'recipeId', { unique: false })
+        }
       }
       request.onsuccess = () => {
         const db = request.result
@@ -178,14 +191,27 @@ export class RecipeRepository {
   async delete(id: string, expectedRevision: number): Promise<void> {
     const db = await this.open()
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite')
+      const tx = db.transaction([STORE, IMAGE_STORE], 'readwrite')
       const store = tx.objectStore(STORE)
       const request = store.get(id)
       let conflict = false
       request.onsuccess = () => {
         const current = request.result as RecipeRecord | undefined
         if (!current || current.revision !== expectedRevision) conflict = true
-        else store.delete(id)
+        else {
+          store.delete(id)
+          const images = tx.objectStore(IMAGE_STORE)
+          const request = images
+            .index('recipeId')
+            .openKeyCursor(IDBKeyRange.only(id))
+          request.onsuccess = () => {
+            const cursor = request.result
+            if (cursor) {
+              images.delete(cursor.primaryKey)
+              cursor.continue()
+            }
+          }
+        }
       }
       tx.oncomplete = () => {
         db.close()
@@ -195,6 +221,259 @@ export class RecipeRepository {
       tx.onabort = () => {
         db.close()
         reject(tx.error ?? new Error('Не удалось удалить рецепт.'))
+      }
+    })
+  }
+
+  async getImage(id: string): Promise<StoredImage | null> {
+    const db = await this.open()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IMAGE_STORE, 'readonly')
+      const request = tx.objectStore(IMAGE_STORE).get(id)
+      let image: StoredImage | undefined
+      request.onsuccess = () => {
+        image = request.result as StoredImage | undefined
+      }
+      tx.oncomplete = () => {
+        db.close()
+        resolve(image ?? null)
+      }
+      tx.onabort = () => {
+        db.close()
+        reject(tx.error ?? new Error('Не удалось прочитать фотографию.'))
+      }
+    })
+  }
+
+  async findImageByFingerprint(
+    recipeId: string,
+    fingerprint: string,
+  ): Promise<StoredImage | null> {
+    const db = await this.open()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IMAGE_STORE, 'readonly')
+      const request = tx
+        .objectStore(IMAGE_STORE)
+        .index('recipeId')
+        .getAll(recipeId)
+      let image: StoredImage | undefined
+      request.onsuccess = () => {
+        image = (request.result as StoredImage[]).find(
+          (entry) => entry.fingerprint === fingerprint,
+        )
+      }
+      tx.oncomplete = () => {
+        db.close()
+        resolve(image ?? null)
+      }
+      tx.onabort = () => {
+        db.close()
+        reject(tx.error ?? new Error('Не удалось проверить повтор фото.'))
+      }
+    })
+  }
+
+  async saveImage(
+    recipe: Recipe,
+    expectedRevision: number,
+    image: StoredImage,
+    deleteImageIds: string[] = [],
+  ): Promise<StoredRecipe> {
+    const validated = deserializeRecipe(serializeRecipe(recipe))
+    if (
+      image.recipeId !== validated.id ||
+      !validated.assets.some((a) => a.id === image.id)
+    )
+      throw new Error('Фотография не связана с этим рецептом.')
+    const db = await this.open()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE, IMAGE_STORE], 'readwrite')
+      const recipes = tx.objectStore(STORE)
+      const request = recipes.get(validated.id)
+      let result: StoredRecipe | undefined
+      let conflict: Error | undefined
+      request.onsuccess = () => {
+        const current = request.result as RecipeRecord | undefined
+        if ((current?.revision ?? null) !== expectedRevision) {
+          conflict = new RecipeConflictError()
+          tx.abort()
+          return
+        }
+        const next: Recipe = {
+          ...validated,
+          updatedAt: nextTimestamp(
+            this.now(),
+            validated.createdAt,
+            current && decode(current).recipe.updatedAt,
+          ),
+        }
+        const record: RecipeRecord = {
+          id: next.id,
+          revision: (current?.revision ?? 0) + 1,
+          json: serializeRecipe(next),
+        }
+        recipes.put(record)
+        const images = tx.objectStore(IMAGE_STORE)
+        const existingImageRequest = images.get(image.id)
+        existingImageRequest.onsuccess = () => {
+          const existingImage = existingImageRequest.result as
+            StoredImage | undefined
+          if (existingImage && existingImage.recipeId !== validated.id) {
+            conflict = new RecipeConflictError(
+              'ID фотографии уже используется другим рецептом.',
+            )
+            tx.abort()
+            return
+          }
+          images.put(image)
+        }
+        deleteImageIds
+          .filter((id) => id !== image.id)
+          .forEach((id) => {
+            const previous = images.get(id)
+            previous.onsuccess = () => {
+              if (
+                (previous.result as StoredImage | undefined)?.recipeId ===
+                validated.id
+              )
+                images.delete(id)
+            }
+          })
+        result = decode(record)
+      }
+      tx.oncomplete = () => {
+        db.close()
+        if (result) resolve(result)
+        else reject(new Error('Фотография не была сохранена.'))
+      }
+      tx.onabort = () => {
+        db.close()
+        reject(
+          conflict ?? tx.error ?? new Error('Не удалось сохранить фотографию.'),
+        )
+      }
+    })
+  }
+
+  async deleteImage(
+    recipe: Recipe,
+    expectedRevision: number,
+    imageId: string,
+  ): Promise<StoredRecipe> {
+    return this.deleteImages(recipe, expectedRevision, [imageId])
+  }
+
+  async deleteImages(
+    recipe: Recipe,
+    expectedRevision: number,
+    imageIds: string[],
+  ): Promise<StoredRecipe> {
+    const validated = deserializeRecipe(serializeRecipe(recipe))
+    const db = await this.open()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE, IMAGE_STORE], 'readwrite')
+      const recipes = tx.objectStore(STORE)
+      const request = recipes.get(validated.id)
+      let result: StoredRecipe | undefined
+      let conflict: Error | undefined
+      request.onsuccess = () => {
+        const current = request.result as RecipeRecord | undefined
+        if ((current?.revision ?? null) !== expectedRevision) {
+          conflict = new RecipeConflictError()
+          tx.abort()
+          return
+        }
+        const next: Recipe = {
+          ...validated,
+          updatedAt: nextTimestamp(
+            this.now(),
+            validated.createdAt,
+            current && decode(current).recipe.updatedAt,
+          ),
+        }
+        const record: RecipeRecord = {
+          id: next.id,
+          revision: (current?.revision ?? 0) + 1,
+          json: serializeRecipe(next),
+        }
+        recipes.put(record)
+        const images = tx.objectStore(IMAGE_STORE)
+        imageIds.forEach((imageId) => {
+          const imageRequest = images.get(imageId)
+          imageRequest.onsuccess = () => {
+            if (
+              (imageRequest.result as StoredImage | undefined)?.recipeId ===
+              validated.id
+            )
+              images.delete(imageId)
+          }
+        })
+        result = decode(record)
+      }
+      tx.oncomplete = () => {
+        db.close()
+        if (result) resolve(result)
+        else reject(new Error('Фотография не была удалена.'))
+      }
+      tx.onabort = () => {
+        db.close()
+        reject(
+          conflict ?? tx.error ?? new Error('Не удалось удалить фотографию.'),
+        )
+      }
+    })
+  }
+
+  async duplicateWithImages(
+    source: Recipe,
+    duplicate: Recipe,
+  ): Promise<StoredRecipe> {
+    const validated = deserializeRecipe(serializeRecipe(duplicate))
+    const db = await this.open()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE, IMAGE_STORE], 'readwrite')
+      const recipes = tx.objectStore(STORE)
+      const images = tx.objectStore(IMAGE_STORE)
+      const sourceRequest = images.index('recipeId').getAll(source.id)
+      let result: StoredRecipe | undefined
+      sourceRequest.onsuccess = () => {
+        const originals = sourceRequest.result as StoredImage[]
+        for (const original of originals) {
+          const asset = source.assets.find((item) => item.id === original.id)
+          if (!asset) continue
+          const sourceIndex = source.assets.findIndex(
+            (item) => item.id === asset.id,
+          )
+          const replacement = validated.assets[sourceIndex]
+          if (replacement) {
+            images.add({
+              ...original,
+              id: replacement.id,
+              recipeId: validated.id,
+              blob: original.blob.slice(
+                0,
+                original.blob.size,
+                original.blob.type,
+              ),
+            } satisfies StoredImage)
+          }
+        }
+        const record: RecipeRecord = {
+          id: validated.id,
+          revision: 1,
+          json: serializeRecipe(validated),
+        }
+        recipes.add(record)
+        result = decode(record)
+      }
+      tx.oncomplete = () => {
+        db.close()
+        if (result) resolve(result)
+        else reject(new Error('Копия рецепта не создана.'))
+      }
+      tx.onabort = () => {
+        db.close()
+        reject(tx.error ?? new Error('Не удалось скопировать фотографии.'))
       }
     })
   }
