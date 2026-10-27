@@ -56,6 +56,16 @@ function App() {
       .catch(workspace.reportError)
   }
 
+  const addDemoRecipe = () => {
+    void workspace
+      .addDemoRecipe()
+      .then(() => {
+        setSection('editor')
+        setPanel('editor')
+      })
+      .catch(workspace.reportError)
+  }
+
   return (
     <div className="flex min-h-svh min-w-0 bg-background text-foreground">
       <AppSidebar
@@ -172,6 +182,7 @@ function App() {
             recentIds={workspace.recentIds}
             loading={workspace.loading}
             onCreate={create}
+            onAddDemo={addDemoRecipe}
             onOpen={open}
             onDuplicate={duplicate}
             onDelete={(item) => {

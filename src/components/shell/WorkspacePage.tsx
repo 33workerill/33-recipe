@@ -4,6 +4,7 @@ import {
   Clock3,
   Copy,
   Download,
+  FlaskConical,
   Plus,
   Search,
   Settings2,
@@ -23,6 +24,7 @@ type Props = {
   recentIds: string[]
   loading: boolean
   onCreate: () => void
+  onAddDemo: () => void
   onOpen: (id: string) => void
   onDuplicate: (id: string) => void
   onDelete: (item: StoredRecipe) => void
@@ -209,6 +211,7 @@ export function WorkspacePage({
   recentIds,
   loading,
   onCreate,
+  onAddDemo,
   onOpen,
   onDuplicate,
   onDelete,
@@ -269,9 +272,16 @@ export function WorkspacePage({
                   Последние открытые рецепты
                 </p>
               )}
-              <Button type="button" variant="primary" onClick={onCreate}>
-                <Plus /> Новый рецепт
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {import.meta.env.DEV && section === 'recipes' && (
+                  <Button type="button" variant="outline" onClick={onAddDemo}>
+                    <FlaskConical /> Добавить тестовый рецепт
+                  </Button>
+                )}
+                <Button type="button" variant="primary" onClick={onCreate}>
+                  <Plus /> Новый рецепт
+                </Button>
+              </div>
             </div>
             <div className="mt-5">
               {loading ? (

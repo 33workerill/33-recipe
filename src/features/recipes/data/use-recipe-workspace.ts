@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createEmptyRecipe, type Recipe } from '@/features/recipes/model'
+import {
+  createDemoRecipe,
+  DEMO_RECIPE_ID,
+} from '@/features/recipes/data/development-recipe'
 import { createBackup, parseBackup } from '@/features/recipes/data/backup'
 import { duplicateRecipe } from '@/features/recipes/data/duplicate'
 import { processImageFile } from '@/features/recipes/data/image-file'
@@ -58,6 +62,7 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
   const savedSeqRef = useRef(0)
   const invalidInputsRef = useRef(new Set<string>())
   const seenImageSelectionsRef = useRef(new Map<string, string | null>())
+  const demoCreationRef = useRef<Promise<void> | null>(null)
 
   const replaceCurrent = useCallback((value: StoredRecipe | null) => {
     currentRef.current = value
@@ -260,6 +265,30 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
     markRecent(saved.recipe.id)
     await refresh()
   }, [repo, prepareSwitch, replaceCurrent, markRecent, refresh])
+
+  const addDemoRecipe = useCallback(() => {
+    if (!import.meta.env.DEV) return Promise.resolve()
+    if (demoCreationRef.current) return demoCreationRef.current
+    const operation = (async () => {
+      await prepareSwitch()
+      if (!(await repo.get(DEMO_RECIPE_ID))) {
+        try {
+          await repo.save(createDemoRecipe(), null)
+        } catch (error) {
+          // A second development tab may have added the stable demo ID first.
+          if (!(await repo.get(DEMO_RECIPE_ID))) throw error
+        }
+      }
+      await open(DEMO_RECIPE_ID)
+      await refresh()
+    })()
+    demoCreationRef.current = operation
+    const clearOperation = () => {
+      if (demoCreationRef.current === operation) demoCreationRef.current = null
+    }
+    void operation.then(clearOperation, clearOperation)
+    return operation
+  }, [open, prepareSwitch, refresh, repo])
 
   const remove = useCallback(
     async (item: StoredRecipe) => {
@@ -547,6 +576,7 @@ export function useRecipeWorkspace(repository?: RecipeRepository) {
     prepareSwitch,
     open,
     create,
+    addDemoRecipe,
     remove,
     duplicate,
     saveImage,

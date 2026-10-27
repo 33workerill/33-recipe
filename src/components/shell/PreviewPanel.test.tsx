@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { PreviewPanel } from '@/components/shell/PreviewPanel'
+import { createDemoRecipe } from '@/features/recipes/data/development-recipe'
 import { pizzaRecipe } from '@/features/recipes/model/__fixtures__/recipes'
 
 describe('live recipe preview', () => {
@@ -38,6 +39,20 @@ describe('live recipe preview', () => {
       />,
     )
     expect(container.querySelector(`img[src="blob:cover"]`)).toBeInTheDocument()
+  })
+
+  it('renders the development demo recipe content for style review', () => {
+    render(<PreviewPanel recipe={createDemoRecipe()} imageUrls={{}} />)
+    expect(screen.getByText('Пицца Маргарита — ТЕСТ')).toBeInTheDocument()
+    expect(screen.getByText('Моцарелла')).toBeInTheDocument()
+    expect(screen.getByText('250 г')).toBeInTheDocument()
+    expect(screen.getByText('780')).toBeInTheDocument()
+    expect(screen.getByText('24')).toBeInTheDocument()
+    expect(screen.getByText('112')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(15)
+    expect(
+      screen.getByText(/тестовая демонстрационная запись/i),
+    ).toBeInTheDocument()
   })
 
   it('renders gallery images that are present in local storage', () => {
